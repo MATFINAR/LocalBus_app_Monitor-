@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import '../models/alerta.dart';
 import '../services/api_service.dart';
+import '../tema.dart';
 import '../utils/estados.dart';
 import '../utils/formato.dart';
+import '../widgets/comunes.dart';
 
 class AlertasScreen extends StatefulWidget {
   /// Abre el mapa con la ruta de la alerta elegida.
@@ -31,7 +33,7 @@ class _AlertasScreenState extends State<AlertasScreen> {
 
   Future<void> _cargarAlertas() async {
     setState(() {
-      _cargando = true;
+      _cargando = _alertas.isEmpty;
       _error = null;
     });
 
@@ -59,53 +61,38 @@ class _AlertasScreenState extends State<AlertasScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('⚠️ Alertas'),
-        backgroundColor: Colors.blue,
-        foregroundColor: Colors.white,
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.refresh),
-            onPressed: _cargarAlertas,
-          ),
-        ],
-      ),
+      appBar: barraSuperior(context, 'Alertas', acciones: [
+        IconButton(
+          icon: const Icon(Icons.refresh),
+          tooltip: 'Actualizar',
+          onPressed: _cargarAlertas,
+        ),
+      ]),
       body: _buildBody(),
     );
   }
 
   Widget _buildBody() {
-    if (_cargando) {
-      return const Center(child: CircularProgressIndicator());
-    }
+    if (_cargando) return const EstadoCargando('Cargando alertas…');
 
-    if (_error != null) {
-      return Center(
-        child: Padding(
-          padding: const EdgeInsets.all(20),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              const Icon(Icons.error_outline, size: 64, color: Colors.red),
-              const SizedBox(height: 16),
-              const Text('Error al cargar alertas',
-                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-              const SizedBox(height: 8),
-              Text(_error!, textAlign: TextAlign.center),
-              const SizedBox(height: 20),
-              ElevatedButton.icon(
-                onPressed: _cargarAlertas,
-                icon: const Icon(Icons.refresh),
-                label: const Text('Reintentar'),
-              ),
-            ],
-          ),
-        ),
+    if (_error != null && _alertas.isEmpty) {
+      return EstadoError(
+        titulo: 'No se pudieron cargar las alertas',
+        mensaje: _error!,
+        onReintentar: _cargarAlertas,
       );
     }
 
     if (_alertas.isEmpty) {
-      return const Center(child: Text('No hay alertas publicadas'));
+      return RefreshIndicator(
+        onRefresh: _cargarAlertas,
+        child: ListView(
+          padding: const EdgeInsets.all(16),
+          children: const [
+            EstadoVacio('No hay alertas publicadas. Cuando una empresa publique una, aparecerá aquí.'),
+          ],
+        ),
+      );
     }
 
     final filtradas = _alertas
@@ -121,19 +108,21 @@ class _AlertasScreenState extends State<AlertasScreen> {
     return RefreshIndicator(
       onRefresh: _cargarAlertas,
       child: ListView(
-        padding: const EdgeInsets.all(12),
+        padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
         children: [
+          if (_error != null)
+            EstadoVacio('No se pudo actualizar: $_error', accion: 'Reintentar', onAccion: _cargarAlertas),
           _filtros(),
-          const SizedBox(height: 12),
-          _encabezado('En proceso', enProceso.length),
+          const SizedBox(height: 16),
+          EncabezadoSeccion('En proceso', cantidad: enProceso.length),
           if (enProceso.isEmpty)
-            _vacio('Ninguna alerta está en proceso ahora.')
+            const EstadoVacio('Ninguna alerta está en proceso ahora.')
           else
-            ...enProceso.map(_buildAlertaCard),
+            ...enProceso.map(_ficha),
           if (resueltas.isNotEmpty) ...[
             const SizedBox(height: 8),
-            _encabezado('Resueltas', resueltas.length),
-            ...resueltas.map(_buildAlertaCard),
+            EncabezadoSeccion('Resueltas', cantidad: resueltas.length),
+            ...resueltas.map(_ficha),
           ],
         ],
       ),
@@ -146,7 +135,7 @@ class _AlertasScreenState extends State<AlertasScreen> {
     final rutas = <int, String>{};
     for (final a in _alertas) {
       if (_empresa == null || a.empresa == _empresa) {
-        rutas[a.rutaId] = a.rutaCodigo.isEmpty ? a.ruta : '${a.rutaCodigo} ${a.ruta}';
+        rutas[a.rutaId] = a.rutaCodigo.isEmpty ? a.ruta : '${a.rutaCodigo}  ${a.ruta}';
       }
     }
     final rutasOrdenadas = rutas.entries.toList()..sort((a, b) => a.value.compareTo(b.value));
@@ -154,7 +143,7 @@ class _AlertasScreenState extends State<AlertasScreen> {
     return Column(
       children: [
         if (empresas.length > 1) ...[
-          _desplegable<String?>(
+          Desplegable<String?>(
             etiqueta: 'Empresa',
             valor: _empresa,
             opciones: {null: 'Todas las empresas', for (final e in empresas) e: e},
@@ -163,9 +152,9 @@ class _AlertasScreenState extends State<AlertasScreen> {
               _rutaId = null;
             }),
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 12),
         ],
-        _desplegable<int?>(
+        Desplegable<int?>(
           etiqueta: 'Ruta',
           valor: _rutaId,
           opciones: {null: 'Todas las rutas', for (final r in rutasOrdenadas) r.key: r.value},
@@ -175,151 +164,75 @@ class _AlertasScreenState extends State<AlertasScreen> {
     );
   }
 
-  Widget _desplegable<T>({
-    required String etiqueta,
-    required T valor,
-    required Map<T, String> opciones,
-    required ValueChanged<T?> alCambiar,
-  }) {
-    return InputDecorator(
-      decoration: InputDecoration(
-        labelText: etiqueta,
-        border: const OutlineInputBorder(),
-        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-      ),
-      child: DropdownButtonHideUnderline(
-        child: DropdownButton<T>(
-          value: valor,
-          isExpanded: true,
-          items: opciones.entries
-              .map((o) => DropdownMenuItem<T>(
-                    value: o.key,
-                    child: Text(o.value, overflow: TextOverflow.ellipsis),
-                  ))
-              .toList(),
-          onChanged: alCambiar,
-        ),
-      ),
-    );
-  }
-
-  Widget _encabezado(String titulo, int cantidad) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(4, 4, 4, 10),
-      child: Text(
-        '$titulo ($cantidad)',
-        style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
-      ),
-    );
-  }
-
-  Widget _vacio(String texto) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(4, 0, 4, 12),
-      child: Text(texto, style: TextStyle(color: Colors.grey.shade700)),
-    );
-  }
-
-  Widget _buildAlertaCard(Alerta alerta) {
+  Widget _ficha(Alerta alerta) {
+    final c = context.colores;
     final tipo = etiquetaTipoAlerta(alerta.tipo);
     final estado = etiquetaEstadoAlerta(alerta);
+    final resuelta = alerta.estaResuelta;
 
-    return Card(
-      margin: const EdgeInsets.only(bottom: 12),
-      elevation: 3,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      child: Container(
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(16),
-          border: Border(left: BorderSide(color: tipo.color, width: 5)),
-        ),
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                _insignia(tipo),
-                const SizedBox(width: 6),
-                _insignia(estado),
-                const Spacer(),
-                Text(
-                  haceCuanto(alerta.fechaVisible),
-                  style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            Text(
-              alerta.descripcion,
-              style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w500),
-            ),
-            if (alerta.estaVigente && alerta.vence != null) ...[
-              const SizedBox(height: 8),
-              Row(
-                children: [
-                  Icon(Icons.timer_outlined, size: 14, color: Colors.grey.shade700),
-                  const SizedBox(width: 4),
-                  Text(
-                    hastaCuando(alerta.vence!),
-                    style: TextStyle(fontSize: 12, color: Colors.grey.shade700),
-                  ),
-                ],
+    return Ficha(
+      // Resueltas: franja gris, ya no piden atención
+      franjaIzquierda: resuelta ? c.linea : c.de(tipo.tono),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Insignia(tipo, relleno: !resuelta),
+              const SizedBox(width: 8),
+              Text(
+                estado.texto,
+                style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: c.de(estado.tono)),
               ),
+              const Spacer(),
+              Text(haceCuanto(alerta.fechaVisible), style: TextStyle(fontSize: 12, color: c.grisTexto)),
             ],
-            const SizedBox(height: 12),
+          ),
+          const SizedBox(height: 10),
+          Text(
+            alerta.descripcion,
+            style: TextStyle(fontSize: 16, color: resuelta ? c.grisTexto : c.tinta),
+          ),
+          if (alerta.estaVigente && alerta.vence != null) ...[
+            const SizedBox(height: 6),
             Row(
               children: [
-                const Icon(Icons.route, size: 14, color: Colors.grey),
+                Icon(Icons.timer_outlined, size: 15, color: c.grisTexto),
                 const SizedBox(width: 4),
-                Expanded(
-                  child: Text(
-                    alerta.ruta,
-                    style: TextStyle(fontSize: 12, color: Colors.grey.shade700),
-                  ),
-                ),
-                Icon(Icons.person, size: 14, color: Colors.grey.shade600),
-                const SizedBox(width: 4),
-                Text(
-                  alerta.usuario,
-                  style: TextStyle(fontSize: 12, color: Colors.grey.shade700),
-                ),
+                Text(hastaCuando(alerta.vence!), style: TextStyle(fontSize: 13, color: c.grisTexto)),
               ],
-            ),
-            Align(
-              alignment: Alignment.centerRight,
-              child: TextButton.icon(
-                onPressed: () => widget.onVerEnMapa(alerta.rutaId),
-                icon: const Icon(Icons.map_outlined, size: 18),
-                label: Text(alerta.tieneUbicacion && alerta.estaVigente
-                    ? 'Ver en el mapa'
-                    : 'Ver la ruta en el mapa'),
-              ),
             ),
           ],
-        ),
-      ),
-    );
-  }
-
-  Widget _insignia(Etiqueta etiqueta) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-      decoration: BoxDecoration(
-        color: etiqueta.color.withValues(alpha: 0.15),
-        borderRadius: BorderRadius.circular(20),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(etiqueta.icono, size: 14, color: etiqueta.color),
-          const SizedBox(width: 4),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              if (alerta.rutaCodigo.isNotEmpty) ...[
+                PlacaRuta(codigo: alerta.rutaCodigo, rutaId: alerta.rutaId, tamano: 14),
+                const SizedBox(width: 8),
+              ],
+              Expanded(
+                child: Text(
+                  alerta.ruta,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(fontSize: 13, color: c.tinta),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
           Text(
-            etiqueta.texto,
-            style: TextStyle(
-              color: etiqueta.color,
-              fontWeight: FontWeight.bold,
-              fontSize: 11,
+            'Reportó: ${alerta.usuario}',
+            style: TextStyle(fontSize: 12, color: c.grisTexto),
+          ),
+          const SizedBox(height: 4),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: TextButton.icon(
+              onPressed: () => widget.onVerEnMapa(alerta.rutaId),
+              style: TextButton.styleFrom(padding: EdgeInsets.zero),
+              icon: const Icon(Icons.map_outlined, size: 18),
+              label: Text(alerta.tieneUbicacion && alerta.estaVigente ? 'Ver en el mapa' : 'Ver la ruta en el mapa'),
             ),
           ),
         ],

@@ -38,8 +38,21 @@ flutter test
 
 Prueban la lectura de las respuestas de la API (modelos) y el formato de fechas.
 
+## Diseño
+
+Sigue la guía de diseño de LocalBus (`docs/GUIA_DE_DISENO.md` del proyecto): blanco predominante
+con negro, azul y rojo de la marca; verde y amarillo solo como estado; cada ruta con su color de
+placa (`id % 7`, la misma paleta de la web); Barlow Condensed en títulos y placas, Atkinson
+Hyperlegible en el texto; esquinas de 3 y 4 px, líneas de 1 px y sin sombras salvo en lo que flota
+sobre el mapa. Tema claro u oscuro según el dispositivo.
+
+Las tipografías se descargan de Google Fonts (`google_fonts`) la primera vez que se abre la app
+con internet y quedan guardadas; sin conexión se usa la fuente del sistema.
+
 ## Estructura
 
+- `lib/tema.dart`: colores (claro y oscuro), paleta de rutas, tipografías y tema.
+- `lib/widgets/comunes.dart`: placa de ruta, insignias, fichas, campos y estados de carga, error y vacío.
 - `lib/config.dart`: dirección del servidor e intervalos de consulta.
 - `lib/services/api_service.dart`: peticiones a la API y mensajes de error.
 - `lib/models/`: `Ruta`, `Alerta`, `BusUbicacion`.

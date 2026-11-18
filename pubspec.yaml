@@ -13,6 +13,8 @@ dependencies:
   http: ^1.2.0
   flutter_map: ^6.1.0
   latlong2: ^0.9.0
+  # Tipografías de la marca (Barlow Condensed y Atkinson Hyperlegible), las mismas de la web
+  google_fonts: ^6.2.1
 
 dev_dependencies:
   flutter_test:

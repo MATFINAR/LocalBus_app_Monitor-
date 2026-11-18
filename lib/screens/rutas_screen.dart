@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import '../models/ruta.dart';
 import '../services/api_service.dart';
+import '../tema.dart';
 import '../utils/estados.dart';
 import '../utils/texto.dart';
+import '../widgets/comunes.dart';
 
 class RutasScreen extends StatefulWidget {
   /// Abre el mapa con esta ruta elegida.
@@ -15,7 +17,7 @@ class RutasScreen extends StatefulWidget {
 }
 
 class _RutasScreenState extends State<RutasScreen> {
-  /// Orden de las pestañas de estado (null = todas).
+  /// Orden de los filtros de estado (null = todas).
   static const List<String?> _estados = [
     null,
     Ruta.activa,
@@ -48,7 +50,7 @@ class _RutasScreenState extends State<RutasScreen> {
 
   Future<void> _cargarRutas() async {
     setState(() {
-      _cargando = true;
+      _cargando = _rutas.isEmpty;
       _error = null;
     });
 
@@ -84,57 +86,32 @@ class _RutasScreenState extends State<RutasScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('🛣️ Rutas'),
-        backgroundColor: Colors.blue,
-        foregroundColor: Colors.white,
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.refresh),
-            tooltip: 'Actualizar',
-            onPressed: _cargarRutas,
-          ),
-        ],
-      ),
+      appBar: barraSuperior(context, 'Rutas', acciones: [
+        IconButton(
+          icon: const Icon(Icons.refresh),
+          tooltip: 'Actualizar',
+          onPressed: _cargarRutas,
+        ),
+      ]),
       body: _buildBody(),
     );
   }
 
   Widget _buildBody() {
-    if (_cargando) {
-      return const Center(child: CircularProgressIndicator());
-    }
+    if (_cargando) return const EstadoCargando('Cargando rutas…');
 
-    if (_error != null) {
-      return Center(
-        child: Padding(
-          padding: const EdgeInsets.all(20),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              const Icon(Icons.error_outline, size: 64, color: Colors.red),
-              const SizedBox(height: 16),
-              const Text(
-                'Error al cargar rutas',
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-              ),
-              const SizedBox(height: 8),
-              Text(_error!, textAlign: TextAlign.center),
-              const SizedBox(height: 20),
-              ElevatedButton.icon(
-                onPressed: _cargarRutas,
-                icon: const Icon(Icons.refresh),
-                label: const Text('Reintentar'),
-              ),
-            ],
-          ),
-        ),
+    if (_error != null && _rutas.isEmpty) {
+      return EstadoError(
+        titulo: 'No se pudieron cargar las rutas',
+        mensaje: _error!,
+        onReintentar: _cargarRutas,
       );
     }
 
     if (_rutas.isEmpty) {
-      return const Center(
-        child: Text('No hay rutas registradas'),
+      return const Padding(
+        padding: EdgeInsets.all(16),
+        child: EstadoVacio('Todavía no hay rutas habilitadas. Cuando una empresa cree una, aparecerá aquí.'),
       );
     }
 
@@ -148,30 +125,34 @@ class _RutasScreenState extends State<RutasScreen> {
     return RefreshIndicator(
       onRefresh: _cargarRutas,
       child: ListView.builder(
-        padding: const EdgeInsets.all(12),
+        padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
         itemCount: visibles.length + 1,
         itemBuilder: (context, index) {
           if (index == 0) return _filtros(candidatas, visibles.isEmpty);
-          return _buildRutaCard(visibles[index - 1]);
+          return _ficha(visibles[index - 1]);
         },
       ),
     );
   }
 
   Widget _filtros(List<Ruta> candidatas, bool sinResultados) {
+    final c = context.colores;
     final empresas = _rutas.map((r) => r.empresa).where((e) => e.isNotEmpty).toSet().toList()..sort();
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        // Si la última actualización falló, se avisa sin tapar las rutas que ya se tenían
+        if (_error != null) EstadoVacio('No se pudo actualizar: $_error', accion: 'Reintentar', onAccion: _cargarRutas),
         TextField(
           controller: _buscador,
-          decoration: InputDecoration(
-            prefixIcon: const Icon(Icons.search),
-            labelText: 'Buscar ruta',
-            hintText: 'Código, nombre, origen o destino',
-            border: const OutlineInputBorder(),
-            suffixIcon: _busqueda.isEmpty
+          textInputAction: TextInputAction.search,
+          decoration: decoracionCampo(
+            context,
+            etiqueta: 'Buscar ruta',
+            ayuda: 'Código, nombre, origen o destino',
+            prefijo: const Icon(Icons.search),
+            sufijo: _busqueda.isEmpty
                 ? null
                 : IconButton(
                     icon: const Icon(Icons.clear),
@@ -185,57 +166,45 @@ class _RutasScreenState extends State<RutasScreen> {
           onChanged: (texto) => setState(() => _busqueda = texto),
         ),
         if (empresas.length > 1) ...[
-          const SizedBox(height: 8),
-          InputDecorator(
-            decoration: const InputDecoration(
-              labelText: 'Empresa',
-              border: OutlineInputBorder(),
-              contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-            ),
-            child: DropdownButtonHideUnderline(
-              child: DropdownButton<String?>(
-                value: _empresa,
-                isExpanded: true,
-                items: [
-                  const DropdownMenuItem<String?>(value: null, child: Text('Todas las empresas')),
-                  ...empresas.map((e) => DropdownMenuItem<String?>(
-                        value: e,
-                        child: Text(e, overflow: TextOverflow.ellipsis),
-                      )),
-                ],
-                onChanged: (valor) => setState(() => _empresa = valor),
-              ),
-            ),
+          const SizedBox(height: 12),
+          Desplegable<String?>(
+            etiqueta: 'Empresa',
+            valor: _empresa,
+            opciones: {null: 'Todas las empresas', for (final e in empresas) e: e},
+            alCambiar: (valor) => setState(() => _empresa = valor),
           ),
         ],
-        const SizedBox(height: 8),
+        const SizedBox(height: 14),
         Wrap(
           spacing: 8,
-          runSpacing: 4,
+          runSpacing: 8,
           children: _estados.map((estado) {
             final cantidad = estado == null
                 ? candidatas.length
                 : candidatas.where((r) => r.estado == estado).length;
+            final elegido = _estado == estado;
             return ChoiceChip(
-              label: Text('${_nombreEstado(estado)} ($cantidad)'),
-              selected: _estado == estado,
+              label: Text('${_nombreEstado(estado)} $cantidad'),
+              labelStyle: TextStyle(
+                color: elegido ? c.fondo : c.tinta,
+                fontWeight: elegido ? FontWeight.w700 : FontWeight.w400,
+              ),
+              selected: elegido,
+              selectedColor: c.tinta,
+              backgroundColor: c.fondo,
+              side: BorderSide(color: elegido ? c.tinta : c.linea),
               onSelected: (_) => setState(() => _estado = estado),
             );
           }).toList(),
         ),
-        const SizedBox(height: 12),
+        const SizedBox(height: 16),
+        Divider(color: c.linea),
+        const SizedBox(height: 16),
         if (sinResultados)
-          Padding(
-            padding: const EdgeInsets.symmetric(vertical: 24),
-            child: Center(
-              child: Column(
-                children: [
-                  const Text('Ninguna ruta coincide con estos filtros.'),
-                  const SizedBox(height: 8),
-                  TextButton(onPressed: _quitarFiltros, child: const Text('Quitar filtros')),
-                ],
-              ),
-            ),
+          EstadoVacio(
+            'Ninguna ruta coincide con estos filtros.',
+            accion: 'Quitar filtros',
+            onAccion: _quitarFiltros,
           ),
       ],
     );
@@ -257,157 +226,61 @@ class _RutasScreenState extends State<RutasScreen> {
     }
   }
 
-  Widget _buildRutaCard(Ruta ruta) {
-    final estado = etiquetaRuta(ruta);
+  Widget _ficha(Ruta ruta) {
+    final c = context.colores;
+    final colorRuta = colorDeRuta(ruta.id);
 
-    return Card(
-      margin: const EdgeInsets.only(bottom: 12),
-      elevation: 3,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: Colors.blue.shade800,
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Text(
-                    ruta.codigo,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 12,
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Text(
-                    ruta.nombre,
-                    style: const TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                _insigniaEstado(estado),
-              ],
-            ),
-            if (ruta.empresa.isNotEmpty) ...[
-              const SizedBox(height: 6),
-              Text(ruta.empresa, style: TextStyle(fontSize: 12, color: Colors.grey.shade700)),
-            ],
-            if (ruta.motivo.isNotEmpty) ...[
-              const SizedBox(height: 10),
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Icon(Icons.info_outline, size: 16, color: estado.color),
-                  const SizedBox(width: 6),
-                  Expanded(
-                    child: Text(
-                      ruta.motivo,
-                      style: TextStyle(fontSize: 13, color: Colors.grey.shade800),
-                    ),
-                  ),
-                ],
+    return Ficha(
+      franjaSuperior: colorRuta,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              PlacaRuta(codigo: ruta.codigo, rutaId: ruta.id, tamano: 17),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(ruta.nombre, style: estiloTitulo(size: 21, color: c.tinta)),
               ),
             ],
-            const SizedBox(height: 12),
-            _infoRow(Icons.trip_origin, 'Origen', ruta.origen),
-            const SizedBox(height: 6),
-            _infoRow(Icons.place, 'Destino', ruta.destino),
-            const Divider(height: 24),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceAround,
-              children: [
-                _statItem(Icons.route, '${ruta.distanciaKm.toStringAsFixed(1)} km'),
-                _statItem(Icons.access_time, '${ruta.duracionEstimadaMinutos} min'),
-                _statItem(Icons.location_on, '${ruta.numParadas} paradas'),
-              ],
-            ),
-            const SizedBox(height: 8),
-            Align(
-              alignment: Alignment.centerRight,
-              child: ruta.tieneRecorrido
-                  ? TextButton.icon(
-                      onPressed: () => widget.onVerEnMapa(ruta.id),
-                      icon: const Icon(Icons.map_outlined),
-                      label: const Text('Ver en el mapa'),
-                    )
-                  : Text(
-                      'Sin recorrido trazado',
-                      style: TextStyle(fontSize: 12, color: Colors.grey.shade700),
-                    ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _insigniaEstado(Etiqueta estado) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      decoration: BoxDecoration(
-        color: estado.color.withValues(alpha: 0.12),
-        borderRadius: BorderRadius.circular(20),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(estado.icono, size: 13, color: estado.color),
-          const SizedBox(width: 4),
-          Text(
-            estado.texto,
-            style: TextStyle(
-              color: estado.color,
-              fontWeight: FontWeight.bold,
-              fontSize: 11,
-            ),
           ),
+          if (ruta.empresa.isNotEmpty) ...[
+            const SizedBox(height: 4),
+            Text(ruta.empresa, style: TextStyle(fontSize: 13, color: c.grisTexto)),
+          ],
+          // La ruta activa es lo normal: no lleva insignia
+          if (!ruta.estaActiva) ...[
+            const SizedBox(height: 10),
+            Insignia(etiquetaRuta(ruta)),
+            if (ruta.motivo.isNotEmpty) ...[
+              const SizedBox(height: 6),
+              Text(ruta.motivo, style: TextStyle(fontSize: 13, color: c.grisTexto)),
+            ],
+          ],
+          const SizedBox(height: 14),
+          Recorrido(origen: ruta.origen, destino: ruta.destino, color: colorRuta),
+          const SizedBox(height: 14),
+          Wrap(
+            spacing: 28,
+            runSpacing: 8,
+            children: [
+              DatoEtiquetado('Distancia', '${ruta.distanciaKm.toStringAsFixed(1).replaceAll('.', ',')} km'),
+              DatoEtiquetado('Duración', '${ruta.duracionEstimadaMinutos} min'),
+              DatoEtiquetado('Paradas', '${ruta.numParadas}'),
+            ],
+          ),
+          const SizedBox(height: 12),
+          if (ruta.tieneRecorrido)
+            OutlinedButton.icon(
+              onPressed: () => widget.onVerEnMapa(ruta.id),
+              icon: const Icon(Icons.map_outlined, size: 18),
+              label: const Text('Ver en el mapa'),
+            )
+          else
+            Text('Sin recorrido trazado', style: TextStyle(fontSize: 13, color: c.grisTexto)),
         ],
       ),
-    );
-  }
-
-  Widget _infoRow(IconData icon, String label, String value) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Icon(icon, size: 18, color: Colors.blue),
-        const SizedBox(width: 8),
-        Text(
-          '$label: ',
-          style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
-        ),
-        Expanded(
-          child: Text(
-            value,
-            style: const TextStyle(fontSize: 13, color: Colors.black87),
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _statItem(IconData icon, String text) {
-    return Column(
-      children: [
-        Icon(icon, color: Colors.blue, size: 22),
-        const SizedBox(height: 4),
-        Text(
-          text,
-          style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
-        ),
-      ],
     );
   }
 }

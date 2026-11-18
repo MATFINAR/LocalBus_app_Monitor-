@@ -1,45 +1,48 @@
 import 'package:flutter/material.dart';
 import '../models/alerta.dart';
 import '../models/ruta.dart';
+import '../tema.dart';
 
-/// Texto, color e icono con que se muestra un estado o un tipo.
+/// Texto, tono e icono con que se muestra un estado o un tipo.
+/// El color sale del tema (claro u oscuro) con `context.colores.de(etiqueta.tono)`.
 class Etiqueta {
   final String texto;
-  final Color color;
+  final Tono tono;
   final IconData icono;
-  const Etiqueta(this.texto, this.color, this.icono);
+  const Etiqueta(this.texto, this.tono, this.icono);
 }
 
-/// Estado de una ruta. El color nunca va solo: siempre acompaña al texto.
+/// Estado de una ruta, con los colores de la web: activa verde, sin buses amarillo,
+/// fuera de horario gris, fuera de servicio rojo.
 Etiqueta etiquetaRuta(Ruta ruta) {
   switch (ruta.estado) {
     case Ruta.activa:
-      return Etiqueta(ruta.estadoNombre, Colors.green.shade700, Icons.check_circle_outline);
+      return Etiqueta(ruta.estadoNombre, Tono.exito, Icons.check_circle_outline);
     case Ruta.sinBuses:
-      return Etiqueta(ruta.estadoNombre, Colors.amber.shade800, Icons.portable_wifi_off);
+      return Etiqueta(ruta.estadoNombre, Tono.advertencia, Icons.portable_wifi_off);
     case Ruta.fueraServicio:
-      return Etiqueta(ruta.estadoNombre, Colors.red.shade700, Icons.block);
+      return Etiqueta(ruta.estadoNombre, Tono.peligro, Icons.block);
     default:
-      return Etiqueta(ruta.estadoNombre, Colors.blueGrey, Icons.schedule);
+      return Etiqueta(ruta.estadoNombre, Tono.neutro, Icons.schedule);
   }
 }
 
-/// Tipo de alerta: demora, advertencia o información.
+/// Tipo de alerta: demora roja, advertencia amarilla, información azul.
 Etiqueta etiquetaTipoAlerta(String tipo) {
   switch (tipo) {
     case Alerta.demora:
-      return Etiqueta('Demora', Colors.red.shade700, Icons.access_time);
+      return const Etiqueta('Demora', Tono.peligro, Icons.access_time);
     case Alerta.advertencia:
-      return Etiqueta('Advertencia', Colors.amber.shade800, Icons.warning_amber);
+      return const Etiqueta('Advertencia', Tono.advertencia, Icons.warning_amber);
     default:
-      return Etiqueta('Información', Colors.blue.shade700, Icons.info_outline);
+      return const Etiqueta('Información', Tono.accion, Icons.info_outline);
   }
 }
 
 /// Estado de una alerta publicada.
 Etiqueta etiquetaEstadoAlerta(Alerta alerta) {
   if (alerta.estaResuelta) {
-    return const Etiqueta('Resuelta', Colors.blueGrey, Icons.task_alt);
+    return const Etiqueta('Resuelta', Tono.neutro, Icons.task_alt);
   }
-  return Etiqueta('En proceso', Colors.green.shade700, Icons.radio_button_checked);
+  return const Etiqueta('En proceso', Tono.exito, Icons.radio_button_checked);
 }

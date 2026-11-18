@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'screens/mapa_screen.dart';
 import 'screens/rutas_screen.dart';
 import 'screens/alertas_screen.dart';
+import 'tema.dart';
 import 'utils/seleccion.dart';
 
 void main() {
@@ -16,10 +17,10 @@ class MonitorApp extends StatelessWidget {
     return MaterialApp(
       title: 'LocalBus Monitor',
       debugShowCheckedModeBanner: false,
-      theme: ThemeData(
-        primarySwatch: Colors.blue,
-        fontFamily: 'Segoe UI',
-      ),
+      // Igual que la web: sigue el tema claro u oscuro del dispositivo
+      theme: temaLocalBus(Brightness.light),
+      darkTheme: temaLocalBus(Brightness.dark),
+      themeMode: ThemeMode.system,
       home: const MainNavigation(),
     );
   }
@@ -59,25 +60,85 @@ class _MainNavigationState extends State<MainNavigation> {
   Widget build(BuildContext context) {
     return Scaffold(
       body: IndexedStack(index: _currentIndex, children: _screens),
-      bottomNavigationBar: BottomNavigationBar(
-        currentIndex: _currentIndex,
-        onTap: (index) => setState(() => _currentIndex = index),
-        selectedItemColor: Colors.blue,
-        unselectedItemColor: Colors.grey,
-        items: const [
-          BottomNavigationBarItem(
-            icon: Icon(Icons.map),
-            label: 'Mapa',
+      bottomNavigationBar: _BarraPestanas(
+        actual: _currentIndex,
+        alElegir: (index) => setState(() => _currentIndex = index),
+      ),
+    );
+  }
+}
+
+/// Pestañas inferiores: la activa lleva una línea azul de 3 px arriba y el texto en azul.
+class _BarraPestanas extends StatelessWidget {
+  final int actual;
+  final ValueChanged<int> alElegir;
+
+  const _BarraPestanas({required this.actual, required this.alElegir});
+
+  static const _pestanas = [
+    (Icons.map_outlined, Icons.map, 'Mapa'),
+    (Icons.alt_route, Icons.alt_route, 'Rutas'),
+    (Icons.notifications_none, Icons.notifications, 'Alertas'),
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.colores;
+    return Container(
+      decoration: BoxDecoration(
+        color: c.fondo,
+        border: Border(top: BorderSide(color: c.linea)),
+      ),
+      child: SafeArea(
+        top: false,
+        child: Row(
+          children: [
+            for (var i = 0; i < _pestanas.length; i++)
+              Expanded(child: _pestana(context, i)),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _pestana(BuildContext context, int i) {
+    final c = context.colores;
+    final (icono, iconoActivo, texto) = _pestanas[i];
+    final activa = i == actual;
+    final color = activa ? c.azul : c.grisTexto;
+
+    return Semantics(
+      selected: activa,
+      button: true,
+      label: texto,
+      excludeSemantics: true,
+      child: InkWell(
+        onTap: () => alElegir(i),
+        child: AnimatedContainer(
+          duration: duracionCorta,
+          curve: curvaSuave,
+          height: 60,
+          decoration: BoxDecoration(
+            border: Border(
+              top: BorderSide(color: activa ? c.azul : Colors.transparent, width: 3),
+            ),
           ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.route),
-            label: 'Rutas',
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(activa ? iconoActivo : icono, color: color),
+              const SizedBox(height: 2),
+              Text(
+                texto,
+                style: TextStyle(
+                  fontSize: 12,
+                  color: color,
+                  fontWeight: activa ? FontWeight.w700 : FontWeight.w400,
+                ),
+              ),
+            ],
           ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.warning),
-            label: 'Alertas',
-          ),
-        ],
+        ),
       ),
     );
   }
