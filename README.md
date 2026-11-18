@@ -1,17 +1,47 @@
-# monitor_app
+# LocalBus Monitor
 
-A new Flutter project.
+App Flutter para ver en vivo los buses, las rutas y las alertas de LocalBus. Lee la API pública
+del backend Django (`LocalBus_django`); no necesita iniciar sesión.
 
-## Getting Started
+| Pestaña | Endpoint | Frecuencia |
+|---|---|---|
+| Mapa | `GET /api/ubicaciones/` y `GET /api/rutas/` | buses cada 5 s, rutas cada minuto |
+| Rutas | `GET /api/rutas/` | al abrir y al deslizar para actualizar |
+| Alertas | `GET /api/alertas/` | al abrir y al deslizar para actualizar |
 
-This project is a starting point for a Flutter application.
+## Ejecutar
 
-A few resources to get you started if this is your first Flutter project:
+1. Arranca Django escuchando en la red, no solo en localhost:
 
-- [Learn Flutter](https://docs.flutter.dev/get-started/learn-flutter)
-- [Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Flutter learning resources](https://docs.flutter.dev/reference/learning-resources)
+   ```bash
+   python manage.py runserver 0.0.0.0:8000
+   ```
 
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+2. Agrega la IP del computador a `DJANGO_ALLOWED_HOSTS` en el `.env` de Django
+   (por ejemplo `DJANGO_ALLOWED_HOSTS=localhost,127.0.0.1,192.168.1.50`). Si falta, Django
+   responde 400 y la app lo avisa.
+
+3. Ejecuta la app indicando la dirección del servidor:
+
+   ```bash
+   flutter pub get
+   flutter run --dart-define=API_URL=http://192.168.1.50:8000
+   ```
+
+   Sin `--dart-define` usa `http://192.168.20.59:8000` (ver `lib/config.dart`).
+
+## Pruebas
+
+```bash
+flutter test
+```
+
+Prueban la lectura de las respuestas de la API (modelos) y el formato de fechas.
+
+## Estructura
+
+- `lib/config.dart`: dirección del servidor e intervalos de consulta.
+- `lib/services/api_service.dart`: peticiones a la API y mensajes de error.
+- `lib/models/`: `Ruta`, `Alerta`, `BusUbicacion`.
+- `lib/screens/`: mapa, rutas y alertas.
+- `lib/utils/`: formato de fechas y etiquetas de estado.

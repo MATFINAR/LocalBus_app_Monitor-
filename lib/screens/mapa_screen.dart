@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
+import '../config.dart';
 import '../models/bus_ubicacion.dart';
 import '../models/ruta.dart';
 import '../services/api_service.dart';
@@ -15,29 +16,63 @@ class MapaScreen extends StatefulWidget {
   State<MapaScreen> createState() => _MapaScreenState();
 }
 
-class _MapaScreenState extends State<MapaScreen> {
+class _MapaScreenState extends State<MapaScreen> with WidgetsBindingObserver {
+  /// Centro de Medellín, donde opera LocalBus.
+  static const LatLng _centroInicial = LatLng(6.2442, -75.5812);
+
   final ApiService _apiService = ApiService();
   final MapController _mapController = MapController();
 
   List<BusUbicacion> _buses = [];
   List<Ruta> _rutas = [];
   Timer? _timerBuses;
+  Timer? _timerRutas;
   bool _cargando = true;
+
+  /// Hay una consulta de buses en curso: si el servidor tarda más que el intervalo, no se apilan.
+  bool _consultandoBuses = false;
+
+  /// Último error de conexión; null cuando la última consulta salió bien.
+  String? _errorConexion;
+  DateTime? _ultimaActualizacion;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _cargarDatos();
-    _timerBuses = Timer.periodic(
-      const Duration(seconds: 5),
-      (_) => _cargarBuses(),
-    );
+    _iniciarConsultas();
   }
 
   @override
   void dispose() {
-    _timerBuses?.cancel();
+    WidgetsBinding.instance.removeObserver(this);
+    _detenerConsultas();
     super.dispose();
+  }
+
+  /// Con la app en segundo plano no se consulta: ahorra batería y datos.
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      _cargarDatos();
+      _iniciarConsultas();
+    } else if (state == AppLifecycleState.paused) {
+      _detenerConsultas();
+    }
+  }
+
+  void _iniciarConsultas() {
+    _detenerConsultas();
+    _timerBuses = Timer.periodic(Config.intervaloBuses, (_) => _cargarBuses());
+    _timerRutas = Timer.periodic(Config.intervaloRutas, (_) => _cargarRutas());
+  }
+
+  void _detenerConsultas() {
+    _timerBuses?.cancel();
+    _timerRutas?.cancel();
+    _timerBuses = null;
+    _timerRutas = null;
   }
 
   Future<void> _cargarDatos() async {
@@ -51,13 +86,21 @@ class _MapaScreenState extends State<MapaScreen> {
   }
 
   Future<void> _cargarBuses() async {
+    if (_consultandoBuses) return;
+    _consultandoBuses = true;
     try {
       final buses = await _apiService.obtenerUbicaciones();
       if (mounted) {
-        setState(() => _buses = buses);
+        setState(() {
+          _buses = buses;
+          _errorConexion = null;
+          _ultimaActualizacion = DateTime.now();
+        });
       }
     } catch (e) {
-      debugPrint('Error al cargar buses: $e');
+      if (mounted) setState(() => _errorConexion = e.toString());
+    } finally {
+      _consultandoBuses = false;
     }
   }
 
@@ -68,6 +111,7 @@ class _MapaScreenState extends State<MapaScreen> {
         setState(() => _rutas = rutas);
       }
     } catch (e) {
+      // El aviso de conexión lo da la consulta de buses, que corre cada pocos segundos
       debugPrint('Error al cargar rutas: $e');
     }
   }
@@ -92,7 +136,7 @@ class _MapaScreenState extends State<MapaScreen> {
           FlutterMap(
             mapController: _mapController,
             options: const MapOptions(
-              initialCenter: LatLng(4.6097, -74.0817),
+              initialCenter: _centroInicial,
               initialZoom: 12,
               minZoom: 8,
               maxZoom: 18,
@@ -151,7 +195,7 @@ class _MapaScreenState extends State<MapaScreen> {
                           border: Border.all(color: Colors.greenAccent, width: 3),
                           boxShadow: [
                             BoxShadow(
-                              color: Colors.black.withOpacity(0.3),
+                              color: Colors.black.withValues(alpha: 0.3),
                               blurRadius: 8,
                             ),
                           ],
@@ -178,7 +222,7 @@ class _MapaScreenState extends State<MapaScreen> {
                 borderRadius: BorderRadius.circular(25),
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.black.withOpacity(0.2),
+                    color: Colors.black.withValues(alpha: 0.2),
                     blurRadius: 10,
                   ),
                 ],
@@ -201,15 +245,64 @@ class _MapaScreenState extends State<MapaScreen> {
             ),
           ),
 
-          // Loading
+          // Sin conexión: se ve mientras dure y se va solo al recuperarse
+          if (_errorConexion != null && !_cargando)
+            Positioned(
+              left: 12,
+              right: 12,
+              bottom: 12,
+              child: _avisoSinConexion(),
+            ),
+
+          // Carga inicial
           if (_cargando)
             Container(
-              color: Colors.black.withOpacity(0.3),
+              color: Colors.black.withValues(alpha: 0.3),
               child: const Center(
                 child: CircularProgressIndicator(color: Colors.white),
               ),
             ),
         ],
+      ),
+    );
+  }
+
+  Widget _avisoSinConexion() {
+    final ultima = _ultimaActualizacion;
+    return Material(
+      color: Colors.red.shade700,
+      borderRadius: BorderRadius.circular(8),
+      elevation: 4,
+      child: Semantics(
+        liveRegion: true,
+        child: Padding(
+          padding: const EdgeInsets.all(12),
+          child: Row(
+            children: [
+              const Icon(Icons.cloud_off, color: Colors.white),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      _errorConexion!,
+                      style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      ultima == null
+                          ? 'Reintentando…'
+                          : 'Reintentando… Posiciones de las ${horaConSegundos(ultima)}.',
+                      style: const TextStyle(color: Colors.white, fontSize: 12),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }

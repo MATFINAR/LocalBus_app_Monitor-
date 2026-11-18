@@ -2,10 +2,14 @@
  <!-- ===== PERMISOS ===== -->
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <!-- usesCleartextTraffic: el servidor de LocalBus se usa por http:// en la red local.
+         Sin esto, Android 9+ bloquea esas peticiones en la versión de release.
+         Quitarlo cuando el servidor tenga HTTPS. -->
     <application
-        android:label="monitor_app"
+        android:label="LocalBus Monitor"
         android:name="${applicationName}"
-        android:icon="@mipmap/ic_launcher">
+        android:icon="@mipmap/ic_launcher"
+        android:usesCleartextTraffic="true">
         <activity
             android:name=".MainActivity"
             android:exported="true"
