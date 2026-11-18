@@ -6,6 +6,7 @@ import 'package:monitor_app/models/alerta.dart';
 import 'package:monitor_app/models/bus_ubicacion.dart';
 import 'package:monitor_app/models/ruta.dart';
 import 'package:monitor_app/utils/formato.dart';
+import 'package:monitor_app/utils/texto.dart';
 
 void main() {
   group('Ruta.fromJson', () {
@@ -14,6 +15,8 @@ void main() {
         'id': 3,
         'codigo': 'R3',
         'nombre': 'Centro - Robledo',
+        'empresa': 'Transportes ABC',
+        'empresa_id': 4,
         'estado': 'Sin_buses',
         'estado_nombre': 'Sin buses activos',
         'motivo': 'Hay buses programados, pero ninguno está enviando su ubicación en este momento.',
@@ -30,6 +33,8 @@ void main() {
       expect(ruta.estadoNombre, 'Sin buses activos');
       expect(ruta.motivo, startsWith('Hay buses programados'));
       expect(ruta.estaActiva, isFalse);
+      expect(ruta.empresa, 'Transportes ABC');
+      expect(ruta.tieneRecorrido, isTrue);
       // El backend envía [longitud, latitud]
       expect(ruta.recorrido.first.latitude, 6.25);
       expect(ruta.recorrido.first.longitude, -75.57);
@@ -70,9 +75,16 @@ void main() {
         'fecha': '2026-11-17T10:00:00-05:00',
         'publicada': '2026-11-17T10:05:00-05:00',
         'vence': '2026-11-17T12:05:00-05:00',
+        'ruta_codigo': 'R3',
+        'empresa': 'Transportes ABC',
+        'latitud': 6.251,
+        'longitud': -75.57,
       });
 
       expect(alerta.estaVigente, isTrue);
+      expect(alerta.rutaCodigo, 'R3');
+      expect(alerta.tieneUbicacion, isTrue);
+      expect(alerta.latitud, 6.251);
       expect(alerta.fechaVisible, alerta.publicada);
       expect(alerta.vence, isNotNull);
     });
@@ -86,6 +98,8 @@ void main() {
       });
       expect(alerta.estaResuelta, isTrue);
       expect(alerta.fechaVisible, alerta.fecha);
+      // Las alertas de empresa no tienen ubicación
+      expect(alerta.tieneUbicacion, isFalse);
     });
   });
 
@@ -122,6 +136,19 @@ void main() {
     test('hastaCuando', () {
       expect(hastaCuando(DateTime(2026, 11, 17, 16, 30), ahora: ahora), 'Hasta las 16:30');
       expect(hastaCuando(DateTime(2026, 11, 18, 8, 0), ahora: ahora), 'Hasta el 18/11 a las 08:00');
+    });
+  });
+
+  group('texto', () {
+    test('normalizar quita tildes y mayúsculas', () {
+      expect(normalizar('Parque Berrío'), 'parque berrio');
+      expect(normalizar('ÑUÑOA'), 'nunoa');
+    });
+
+    test('coincide busca en varios textos', () {
+      expect(coincide('berrio', ['C01', 'Parque Berrío - Laureles']), isTrue);
+      expect(coincide('  ', ['lo que sea']), isTrue);
+      expect(coincide('robledo', ['C01', 'Laureles']), isFalse);
     });
   });
 }

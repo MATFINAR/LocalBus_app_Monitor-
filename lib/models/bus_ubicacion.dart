@@ -5,6 +5,7 @@ class BusUbicacion {
   final String empresa;
   final String? ruta;
   final int? rutaId;
+  final String? rutaCodigo;
   final String? conductor;
   final double latitud;
   final double longitud;
@@ -17,6 +18,7 @@ class BusUbicacion {
     required this.empresa,
     this.ruta,
     this.rutaId,
+    this.rutaCodigo,
     this.conductor,
     required this.latitud,
     required this.longitud,
@@ -31,6 +33,7 @@ class BusUbicacion {
       empresa: json['empresa'] ?? '',
       ruta: json['ruta'],
       rutaId: json['ruta_id'],
+      rutaCodigo: json['ruta_codigo'],
       conductor: json['conductor'],
       latitud: (json['latitud'] as num? ?? 0).toDouble(),
       longitud: (json['longitud'] as num? ?? 0).toDouble(),

@@ -11,6 +11,8 @@ class Ruta {
   final int id;
   final String codigo;
   final String nombre;
+  final String empresa;
+  final int empresaId;
   final String origen;
   final String destino;
   final double distanciaKm;
@@ -34,6 +36,8 @@ class Ruta {
     required this.id,
     required this.codigo,
     required this.nombre,
+    required this.empresa,
+    required this.empresaId,
     required this.origen,
     required this.destino,
     required this.distanciaKm,
@@ -48,6 +52,7 @@ class Ruta {
 
   bool get estaActiva => estado == activa;
   bool get estaFueraDeServicio => estado == fueraServicio;
+  bool get tieneRecorrido => recorrido.length >= 2;
 
   factory Ruta.fromJson(Map<String, dynamic> json) {
     final estado = json['estado'] as String? ?? fueraHorario;
@@ -55,6 +60,8 @@ class Ruta {
       id: json['id'] ?? 0,
       codigo: json['codigo'] ?? '',
       nombre: json['nombre'] ?? '',
+      empresa: json['empresa'] ?? '',
+      empresaId: json['empresa_id'] ?? 0,
       origen: json['origen'] ?? '',
       destino: json['destino'] ?? '',
       distanciaKm: (json['distancia_km'] as num? ?? 0).toDouble(),

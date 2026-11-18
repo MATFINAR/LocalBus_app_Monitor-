@@ -5,7 +5,10 @@ import '../utils/estados.dart';
 import '../utils/formato.dart';
 
 class AlertasScreen extends StatefulWidget {
-  const AlertasScreen({super.key});
+  /// Abre el mapa con la ruta de la alerta elegida.
+  final ValueChanged<int> onVerEnMapa;
+
+  const AlertasScreen({super.key, required this.onVerEnMapa});
 
   @override
   State<AlertasScreen> createState() => _AlertasScreenState();
@@ -16,6 +19,9 @@ class _AlertasScreenState extends State<AlertasScreen> {
   List<Alerta> _alertas = [];
   bool _cargando = true;
   String? _error;
+
+  String? _empresa;
+  int? _rutaId;
 
   @override
   void initState() {
@@ -35,6 +41,9 @@ class _AlertasScreenState extends State<AlertasScreen> {
         setState(() {
           _alertas = alertas;
           _cargando = false;
+          // Si lo elegido ya no tiene alertas, se quita el filtro
+          if (_empresa != null && !alertas.any((a) => a.empresa == _empresa)) _empresa = null;
+          if (_rutaId != null && !alertas.any((a) => a.rutaId == _rutaId)) _rutaId = null;
         });
       }
     } catch (e) {
@@ -99,16 +108,23 @@ class _AlertasScreenState extends State<AlertasScreen> {
       return const Center(child: Text('No hay alertas publicadas'));
     }
 
+    final filtradas = _alertas
+        .where((a) => _empresa == null || a.empresa == _empresa)
+        .where((a) => _rutaId == null || a.rutaId == _rutaId)
+        .toList();
+
     // Primero las que siguen en proceso; dentro de cada grupo, la publicada más reciente arriba
     int porFecha(Alerta a, Alerta b) => b.fechaVisible.compareTo(a.fechaVisible);
-    final enProceso = _alertas.where((a) => a.estaVigente).toList()..sort(porFecha);
-    final resueltas = _alertas.where((a) => !a.estaVigente).toList()..sort(porFecha);
+    final enProceso = filtradas.where((a) => a.estaVigente).toList()..sort(porFecha);
+    final resueltas = filtradas.where((a) => !a.estaVigente).toList()..sort(porFecha);
 
     return RefreshIndicator(
       onRefresh: _cargarAlertas,
       child: ListView(
         padding: const EdgeInsets.all(12),
         children: [
+          _filtros(),
+          const SizedBox(height: 12),
           _encabezado('En proceso', enProceso.length),
           if (enProceso.isEmpty)
             _vacio('Ninguna alerta está en proceso ahora.')
@@ -120,6 +136,69 @@ class _AlertasScreenState extends State<AlertasScreen> {
             ...resueltas.map(_buildAlertaCard),
           ],
         ],
+      ),
+    );
+  }
+
+  Widget _filtros() {
+    final empresas = _alertas.map((a) => a.empresa).where((e) => e.isNotEmpty).toSet().toList()..sort();
+    // Las rutas que se ofrecen son las de la empresa elegida, sin repetir
+    final rutas = <int, String>{};
+    for (final a in _alertas) {
+      if (_empresa == null || a.empresa == _empresa) {
+        rutas[a.rutaId] = a.rutaCodigo.isEmpty ? a.ruta : '${a.rutaCodigo} ${a.ruta}';
+      }
+    }
+    final rutasOrdenadas = rutas.entries.toList()..sort((a, b) => a.value.compareTo(b.value));
+
+    return Column(
+      children: [
+        if (empresas.length > 1) ...[
+          _desplegable<String?>(
+            etiqueta: 'Empresa',
+            valor: _empresa,
+            opciones: {null: 'Todas las empresas', for (final e in empresas) e: e},
+            alCambiar: (valor) => setState(() {
+              _empresa = valor;
+              _rutaId = null;
+            }),
+          ),
+          const SizedBox(height: 8),
+        ],
+        _desplegable<int?>(
+          etiqueta: 'Ruta',
+          valor: _rutaId,
+          opciones: {null: 'Todas las rutas', for (final r in rutasOrdenadas) r.key: r.value},
+          alCambiar: (valor) => setState(() => _rutaId = valor),
+        ),
+      ],
+    );
+  }
+
+  Widget _desplegable<T>({
+    required String etiqueta,
+    required T valor,
+    required Map<T, String> opciones,
+    required ValueChanged<T?> alCambiar,
+  }) {
+    return InputDecorator(
+      decoration: InputDecoration(
+        labelText: etiqueta,
+        border: const OutlineInputBorder(),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+      ),
+      child: DropdownButtonHideUnderline(
+        child: DropdownButton<T>(
+          value: valor,
+          isExpanded: true,
+          items: opciones.entries
+              .map((o) => DropdownMenuItem<T>(
+                    value: o.key,
+                    child: Text(o.value, overflow: TextOverflow.ellipsis),
+                  ))
+              .toList(),
+          onChanged: alCambiar,
+        ),
       ),
     );
   }
@@ -206,6 +285,16 @@ class _AlertasScreenState extends State<AlertasScreen> {
                   style: TextStyle(fontSize: 12, color: Colors.grey.shade700),
                 ),
               ],
+            ),
+            Align(
+              alignment: Alignment.centerRight,
+              child: TextButton.icon(
+                onPressed: () => widget.onVerEnMapa(alerta.rutaId),
+                icon: const Icon(Icons.map_outlined, size: 18),
+                label: Text(alerta.tieneUbicacion && alerta.estaVigente
+                    ? 'Ver en el mapa'
+                    : 'Ver la ruta en el mapa'),
+              ),
             ),
           ],
         ),

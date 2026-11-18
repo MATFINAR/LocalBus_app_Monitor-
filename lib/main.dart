@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'screens/mapa_screen.dart';
 import 'screens/rutas_screen.dart';
 import 'screens/alertas_screen.dart';
+import 'utils/seleccion.dart';
 
 void main() {
   runApp(const MonitorApp());
@@ -33,14 +34,26 @@ class MainNavigation extends StatefulWidget {
 
 class _MainNavigationState extends State<MainNavigation> {
   int _currentIndex = 0;
+  final SeleccionRuta _seleccion = SeleccionRuta();
 
   // Se crean una sola vez: IndexedStack las mantiene vivas al cambiar de pestaña, así el mapa
   // conserva su zoom y posición y no se vuelve a descargar todo cada vez.
-  static const List<Widget> _screens = [
-    MapaScreen(),
-    RutasScreen(),
-    AlertasScreen(),
+  late final List<Widget> _screens = [
+    MapaScreen(seleccion: _seleccion),
+    RutasScreen(onVerEnMapa: _verEnMapa),
+    AlertasScreen(onVerEnMapa: _verEnMapa),
   ];
+
+  void _verEnMapa(int rutaId) {
+    _seleccion.elegir(rutaId);
+    setState(() => _currentIndex = 0);
+  }
+
+  @override
+  void dispose() {
+    _seleccion.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
