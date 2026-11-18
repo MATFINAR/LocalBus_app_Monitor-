@@ -5,6 +5,8 @@ import 'package:latlong2/latlong.dart';
 import '../models/bus_ubicacion.dart';
 import '../models/ruta.dart';
 import '../services/api_service.dart';
+import '../utils/estados.dart';
+import '../utils/formato.dart';
 
 class MapaScreen extends StatefulWidget {
   const MapaScreen({super.key});
@@ -104,14 +106,10 @@ class _MapaScreenState extends State<MapaScreen> {
               // Rutas (líneas)
               PolylineLayer(
                 polylines: _rutas
-                    .where((r) => r.coordenadas.isNotEmpty)
+                    .where((r) => r.recorrido.length >= 2)
                     .map((ruta) => Polyline(
-                          points: ruta.coordenadas
-                              .map((c) => LatLng(c[1], c[0]))
-                              .toList(),
-                          color: ruta.estado.toLowerCase() == 'activa'
-                              ? Colors.green
-                              : Colors.red,
+                          points: ruta.recorrido,
+                          color: etiquetaRuta(ruta).color,
                           strokeWidth: 4,
                           borderColor: Colors.white,
                           borderStrokeWidth: 1,
@@ -123,7 +121,7 @@ class _MapaScreenState extends State<MapaScreen> {
               MarkerLayer(
                 markers: _rutas.expand((ruta) {
                   return ruta.paradas.map((parada) => Marker(
-                        point: LatLng(parada['lat']!, parada['lng']!),
+                        point: parada,
                         width: 20,
                         height: 20,
                         child: Container(
@@ -257,13 +255,21 @@ class _MapaScreenState extends State<MapaScreen> {
                 ],
               ),
               const Divider(height: 30),
+              if (bus.conductor != null && bus.conductor!.isNotEmpty) ...[
+                _infoItem(Icons.badge_outlined, 'Conductor', bus.conductor!),
+                const SizedBox(height: 8),
+              ],
+              if (bus.empresa.isNotEmpty) ...[
+                _infoItem(Icons.business, 'Empresa', bus.empresa),
+                const SizedBox(height: 8),
+              ],
               _infoItem(Icons.speed, 'Velocidad', '${bus.velocidad.toStringAsFixed(1)} km/h'),
               const SizedBox(height: 8),
               _infoItem(Icons.my_location, 'Coordenadas',
                   '${bus.latitud.toStringAsFixed(5)}, ${bus.longitud.toStringAsFixed(5)}'),
               const SizedBox(height: 8),
               _infoItem(Icons.access_time, 'Última actualización',
-                  _formatHora(bus.timestamp)),
+                  '${horaConSegundos(bus.timestamp)} (${haceCuanto(bus.timestamp)})'),
               const SizedBox(height: 20),
               SizedBox(
                 width: double.infinity,
@@ -300,13 +306,5 @@ class _MapaScreenState extends State<MapaScreen> {
         Expanded(child: Text(value)),
       ],
     );
-  }
-
-  String _formatHora(DateTime fecha) {
-    final local = fecha.toLocal();
-    final hora = local.hour.toString().padLeft(2, '0');
-    final minuto = local.minute.toString().padLeft(2, '0');
-    final segundo = local.second.toString().padLeft(2, '0');
-    return '$hora:$minuto:$segundo';
   }
 }

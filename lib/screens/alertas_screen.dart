@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import '../models/alerta.dart';
 import '../services/api_service.dart';
+import '../utils/estados.dart';
+import '../utils/formato.dart';
 
 class AlertasScreen extends StatefulWidget {
   const AlertasScreen({super.key});
@@ -94,24 +96,54 @@ class _AlertasScreenState extends State<AlertasScreen> {
     }
 
     if (_alertas.isEmpty) {
-      return const Center(child: Text('No hay alertas activas'));
+      return const Center(child: Text('No hay alertas publicadas'));
     }
+
+    // Primero las que siguen en proceso; dentro de cada grupo, la publicada más reciente arriba
+    int porFecha(Alerta a, Alerta b) => b.fechaVisible.compareTo(a.fechaVisible);
+    final enProceso = _alertas.where((a) => a.estaVigente).toList()..sort(porFecha);
+    final resueltas = _alertas.where((a) => !a.estaVigente).toList()..sort(porFecha);
 
     return RefreshIndicator(
       onRefresh: _cargarAlertas,
-      child: ListView.builder(
+      child: ListView(
         padding: const EdgeInsets.all(12),
-        itemCount: _alertas.length,
-        itemBuilder: (context, index) => _buildAlertaCard(_alertas[index]),
+        children: [
+          _encabezado('En proceso', enProceso.length),
+          if (enProceso.isEmpty)
+            _vacio('Ninguna alerta está en proceso ahora.')
+          else
+            ...enProceso.map(_buildAlertaCard),
+          if (resueltas.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            _encabezado('Resueltas', resueltas.length),
+            ...resueltas.map(_buildAlertaCard),
+          ],
+        ],
       ),
     );
   }
 
+  Widget _encabezado(String titulo, int cantidad) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(4, 4, 4, 10),
+      child: Text(
+        '$titulo ($cantidad)',
+        style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+      ),
+    );
+  }
+
+  Widget _vacio(String texto) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(4, 0, 4, 12),
+      child: Text(texto, style: TextStyle(color: Colors.grey.shade700)),
+    );
+  }
+
   Widget _buildAlertaCard(Alerta alerta) {
-    final info = _getTipoInfo(alerta.tipo);
-    final Color color = info['color'] as Color;
-    final IconData icon = info['icon'] as IconData;
-    final String label = info['label'] as String;
+    final tipo = etiquetaTipoAlerta(alerta.tipo);
+    final estado = etiquetaEstadoAlerta(alerta);
 
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
@@ -120,7 +152,7 @@ class _AlertasScreenState extends State<AlertasScreen> {
       child: Container(
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(16),
-          border: Border(left: BorderSide(color: color, width: 5)),
+          border: Border(left: BorderSide(color: tipo.color, width: 5)),
         ),
         padding: const EdgeInsets.all(16),
         child: Column(
@@ -128,46 +160,34 @@ class _AlertasScreenState extends State<AlertasScreen> {
           children: [
             Row(
               children: [
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: color.withOpacity(0.15),
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(icon, size: 14, color: color),
-                      const SizedBox(width: 4),
-                      Text(
-                        label,
-                        style: TextStyle(
-                          color: color,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 11,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
+                _insignia(tipo),
+                const SizedBox(width: 6),
+                _insignia(estado),
                 const Spacer(),
                 Text(
-                  _formatFecha(alerta.fecha),
-                  style: TextStyle(
-                    fontSize: 11,
-                    color: Colors.grey.shade600,
-                  ),
+                  haceCuanto(alerta.fechaVisible),
+                  style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
                 ),
               ],
             ),
             const SizedBox(height: 12),
             Text(
               alerta.descripcion,
-              style: const TextStyle(
-                fontSize: 15,
-                fontWeight: FontWeight.w500,
-              ),
+              style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w500),
             ),
+            if (alerta.estaVigente && alerta.vence != null) ...[
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  Icon(Icons.timer_outlined, size: 14, color: Colors.grey.shade700),
+                  const SizedBox(width: 4),
+                  Text(
+                    hastaCuando(alerta.vence!),
+                    style: TextStyle(fontSize: 12, color: Colors.grey.shade700),
+                  ),
+                ],
+              ),
+            ],
             const SizedBox(height: 12),
             Row(
               children: [
@@ -176,20 +196,14 @@ class _AlertasScreenState extends State<AlertasScreen> {
                 Expanded(
                   child: Text(
                     alerta.ruta,
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: Colors.grey.shade700,
-                    ),
+                    style: TextStyle(fontSize: 12, color: Colors.grey.shade700),
                   ),
                 ),
                 Icon(Icons.person, size: 14, color: Colors.grey.shade600),
                 const SizedBox(width: 4),
                 Text(
                   alerta.usuario,
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: Colors.grey.shade700,
-                  ),
+                  style: TextStyle(fontSize: 12, color: Colors.grey.shade700),
                 ),
               ],
             ),
@@ -198,42 +212,29 @@ class _AlertasScreenState extends State<AlertasScreen> {
       ),
     );
   }
-  Map<String, dynamic> _getTipoInfo(String tipo) {
-    switch (tipo.toLowerCase()) {
-      case 'delay':
-        return {
-          'label': 'DEMORA',
-          'color': Colors.red,
-          'icon': Icons.access_time,
-        };
-      case 'bus-arriving':
-        return {
-          'label': 'PRÓXIMO',
-          'color': Colors.green,
-          'icon': Icons.directions_bus,
-        };
-      case 'warning':
-        return {
-          'label': 'ADVERTENCIA',
-          'color': Colors.orange,
-          'icon': Icons.warning,
-        };
-      default:
-        return {
-          'label': 'INFO',
-          'color': Colors.blue,
-          'icon': Icons.info,
-        };
-    }
-  }
 
-  String _formatFecha(DateTime fecha) {
-    final now = DateTime.now();
-    final diff = now.difference(fecha);
-
-    if (diff.inMinutes < 1) return 'Ahora';
-    if (diff.inMinutes < 60) return 'Hace ${diff.inMinutes} min';
-    if (diff.inHours < 24) return 'Hace ${diff.inHours} h';
-    return 'Hace ${diff.inDays} días';
+  Widget _insignia(Etiqueta etiqueta) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      decoration: BoxDecoration(
+        color: etiqueta.color.withValues(alpha: 0.15),
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(etiqueta.icono, size: 14, color: etiqueta.color),
+          const SizedBox(width: 4),
+          Text(
+            etiqueta.texto,
+            style: TextStyle(
+              color: etiqueta.color,
+              fontWeight: FontWeight.bold,
+              fontSize: 11,
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }

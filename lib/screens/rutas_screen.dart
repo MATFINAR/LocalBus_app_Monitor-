@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../models/ruta.dart';
 import '../services/api_service.dart';
+import '../utils/estados.dart';
 
 class RutasScreen extends StatefulWidget {
   const RutasScreen({super.key});
@@ -77,9 +78,9 @@ class _RutasScreenState extends State<RutasScreen> {
             children: [
               const Icon(Icons.error_outline, size: 64, color: Colors.red),
               const SizedBox(height: 16),
-              Text(
+              const Text(
                 'Error al cargar rutas',
-                style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
               ),
               const SizedBox(height: 8),
               Text(_error!, textAlign: TextAlign.center),
@@ -106,16 +107,13 @@ class _RutasScreenState extends State<RutasScreen> {
       child: ListView.builder(
         padding: const EdgeInsets.all(12),
         itemCount: _rutas.length,
-        itemBuilder: (context, index) {
-          final ruta = _rutas[index];
-          return _buildRutaCard(ruta);
-        },
+        itemBuilder: (context, index) => _buildRutaCard(_rutas[index]),
       ),
     );
   }
 
   Widget _buildRutaCard(Ruta ruta) {
-    final activa = ruta.estado.toLowerCase() == 'activa';
+    final estado = etiquetaRuta(ruta);
 
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
@@ -153,23 +151,26 @@ class _RutasScreenState extends State<RutasScreen> {
                     ),
                   ),
                 ),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: activa ? Colors.green.shade100 : Colors.red.shade100,
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  child: Text(
-                    ruta.estado,
-                    style: TextStyle(
-                      color: activa ? Colors.green.shade800 : Colors.red.shade800,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 11,
-                    ),
-                  ),
-                ),
+                const SizedBox(width: 8),
+                _insigniaEstado(estado),
               ],
             ),
+            if (ruta.motivo.isNotEmpty) ...[
+              const SizedBox(height: 10),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Icon(Icons.info_outline, size: 16, color: estado.color),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Text(
+                      ruta.motivo,
+                      style: TextStyle(fontSize: 13, color: Colors.grey.shade800),
+                    ),
+                  ),
+                ],
+              ),
+            ],
             const SizedBox(height: 12),
             _infoRow(Icons.trip_origin, 'Origen', ruta.origen),
             const SizedBox(height: 6),
@@ -185,6 +186,31 @@ class _RutasScreenState extends State<RutasScreen> {
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _insigniaEstado(Etiqueta estado) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: estado.color.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(estado.icono, size: 13, color: estado.color),
+          const SizedBox(width: 4),
+          Text(
+            estado.texto,
+            style: TextStyle(
+              color: estado.color,
+              fontWeight: FontWeight.bold,
+              fontSize: 11,
+            ),
+          ),
+        ],
       ),
     );
   }
