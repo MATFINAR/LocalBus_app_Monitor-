@@ -397,7 +397,16 @@ class EstadoError extends StatelessWidget {
   final String mensaje;
   final VoidCallback onReintentar;
 
-  const EstadoError({super.key, required this.titulo, required this.mensaje, required this.onReintentar});
+  /// Si se da, ofrece ir a Ajustes a corregir la dirección del servidor.
+  final VoidCallback? onCambiarServidor;
+
+  const EstadoError({
+    super.key,
+    required this.titulo,
+    required this.mensaje,
+    required this.onReintentar,
+    this.onCambiarServidor,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -419,6 +428,10 @@ class EstadoError extends StatelessWidget {
               icon: const Icon(Icons.refresh),
               label: const Text('Reintentar'),
             ),
+            if (onCambiarServidor != null) ...[
+              const SizedBox(height: 8),
+              TextButton(onPressed: onCambiarServidor, child: const Text('Cambiar servidor')),
+            ],
           ],
         ),
       ),

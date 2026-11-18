@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../models/ruta.dart';
 import '../services/api_service.dart';
+import '../servidor.dart';
 import '../tema.dart';
 import '../utils/estados.dart';
 import '../utils/texto.dart';
@@ -10,7 +11,10 @@ class RutasScreen extends StatefulWidget {
   /// Abre el mapa con esta ruta elegida.
   final ValueChanged<int> onVerEnMapa;
 
-  const RutasScreen({super.key, required this.onVerEnMapa});
+  /// Lleva a Ajustes para corregir la dirección del servidor.
+  final VoidCallback onAbrirAjustes;
+
+  const RutasScreen({super.key, required this.onVerEnMapa, required this.onAbrirAjustes});
 
   @override
   State<RutasScreen> createState() => _RutasScreenState();
@@ -39,11 +43,20 @@ class _RutasScreenState extends State<RutasScreen> {
   @override
   void initState() {
     super.initState();
+    Servidor.instancia.addListener(_alCambiarServidor);
+    _cargarRutas();
+  }
+
+  /// Otro servidor: se descarta lo cargado y se pide de nuevo.
+  void _alCambiarServidor() {
+    if (!mounted) return;
+    _rutas = [];
     _cargarRutas();
   }
 
   @override
   void dispose() {
+    Servidor.instancia.removeListener(_alCambiarServidor);
     _buscador.dispose();
     super.dispose();
   }
@@ -105,6 +118,7 @@ class _RutasScreenState extends State<RutasScreen> {
         titulo: 'No se pudieron cargar las rutas',
         mensaje: _error!,
         onReintentar: _cargarRutas,
+        onCambiarServidor: widget.onAbrirAjustes,
       );
     }
 

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../models/alerta.dart';
 import '../services/api_service.dart';
+import '../servidor.dart';
 import '../tema.dart';
 import '../utils/estados.dart';
 import '../utils/formato.dart';
@@ -10,7 +11,10 @@ class AlertasScreen extends StatefulWidget {
   /// Abre el mapa con la ruta de la alerta elegida.
   final ValueChanged<int> onVerEnMapa;
 
-  const AlertasScreen({super.key, required this.onVerEnMapa});
+  /// Lleva a Ajustes para corregir la dirección del servidor.
+  final VoidCallback onAbrirAjustes;
+
+  const AlertasScreen({super.key, required this.onVerEnMapa, required this.onAbrirAjustes});
 
   @override
   State<AlertasScreen> createState() => _AlertasScreenState();
@@ -28,7 +32,21 @@ class _AlertasScreenState extends State<AlertasScreen> {
   @override
   void initState() {
     super.initState();
+    Servidor.instancia.addListener(_alCambiarServidor);
     _cargarAlertas();
+  }
+
+  /// Otro servidor: se descarta lo cargado y se pide de nuevo.
+  void _alCambiarServidor() {
+    if (!mounted) return;
+    _alertas = [];
+    _cargarAlertas();
+  }
+
+  @override
+  void dispose() {
+    Servidor.instancia.removeListener(_alCambiarServidor);
+    super.dispose();
   }
 
   Future<void> _cargarAlertas() async {
@@ -80,6 +98,7 @@ class _AlertasScreenState extends State<AlertasScreen> {
         titulo: 'No se pudieron cargar las alertas',
         mensaje: _error!,
         onReintentar: _cargarAlertas,
+        onCambiarServidor: widget.onAbrirAjustes,
       );
     }
 

@@ -5,6 +5,7 @@ import '../config.dart';
 import '../models/ruta.dart';
 import '../models/alerta.dart';
 import '../models/bus_ubicacion.dart';
+import '../servidor.dart';
 
 /// Error de la API con un mensaje que se puede mostrar tal cual.
 class ApiException implements Exception {
@@ -16,7 +17,15 @@ class ApiException implements Exception {
 }
 
 class ApiService {
-  static String get baseUrl => Config.apiUrl;
+  /// La que está guardada en Ajustes (o la de compilación si nunca se cambió).
+  static String get baseUrl => Servidor.instancia.url;
+
+  /// Prueba otra dirección sin guardarla. Devuelve cuántas rutas tiene ese servidor.
+  Future<int> probarServidor(String url) async {
+    final data = await _getJson('/api/rutas/', base: url);
+    final List rutas = data['rutas'] ?? [];
+    return rutas.length;
+  }
 
   /// Todas las rutas habilitadas, con su estado calculado.
   Future<List<Ruta>> obtenerRutas() async {
@@ -39,24 +48,29 @@ class ApiService {
     return buses.map((b) => BusUbicacion.fromJson(b)).toList();
   }
 
-  Future<http.Response> _pedir(String ruta) async {
+  Future<http.Response> _pedir(String base, String ruta) async {
     try {
-      return await http.get(Uri.parse('$baseUrl$ruta')).timeout(Config.tiempoEspera);
+      return await http.get(Uri.parse('$base$ruta')).timeout(Config.tiempoEspera);
     } on TimeoutException {
-      throw const ApiException('El servidor tardó demasiado en responder. Revisa la conexión.');
+      throw ApiException('El servidor ($base) tardó demasiado en responder. '
+          'Revisa que el celular y el computador estén en la misma red Wi-Fi.');
     } on http.ClientException {
-      throw ApiException('No se pudo conectar con el servidor ($baseUrl). '
-          'Revisa que esté encendido y en la misma red.');
+      throw ApiException('No se pudo conectar con el servidor ($base). '
+          'Revisa que Django esté encendido y que la dirección en Ajustes sea la correcta.');
+    } on FormatException {
+      throw ApiException('La dirección del servidor ($base) no es válida. Corrígela en Ajustes.');
     }
   }
 
-  Future<Map<String, dynamic>> _getJson(String ruta) async {
-    final respuesta = await _pedir(ruta);
+  Future<Map<String, dynamic>> _getJson(String ruta, {String? base}) async {
+    final servidor = base ?? baseUrl;
+    final respuesta = await _pedir(servidor, ruta);
 
     if (respuesta.statusCode == 400) {
       // Lo más común: la IP del servidor no está en DJANGO_ALLOWED_HOSTS
+      final host = Uri.tryParse(servidor)?.host ?? servidor;
       throw ApiException('El servidor rechazó la petición. '
-          'Agrega la dirección de $baseUrl a DJANGO_ALLOWED_HOSTS.');
+          'Agrega $host a DJANGO_ALLOWED_HOSTS en el .env de Django y reinícialo.');
     }
     if (respuesta.statusCode != 200) {
       throw ApiException('El servidor respondió con un error (${respuesta.statusCode}).');

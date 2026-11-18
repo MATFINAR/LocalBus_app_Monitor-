@@ -5,6 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:monitor_app/models/alerta.dart';
 import 'package:monitor_app/models/bus_ubicacion.dart';
 import 'package:monitor_app/models/ruta.dart';
+import 'package:monitor_app/servidor.dart';
 import 'package:monitor_app/utils/formato.dart';
 import 'package:monitor_app/utils/texto.dart';
 
@@ -149,6 +150,21 @@ void main() {
       expect(coincide('berrio', ['C01', 'Parque Berrío - Laureles']), isTrue);
       expect(coincide('  ', ['lo que sea']), isTrue);
       expect(coincide('robledo', ['C01', 'Laureles']), isFalse);
+    });
+  });
+
+  group('normalizarUrl', () {
+    test('completa el esquema y quita la barra final', () {
+      expect(normalizarUrl('192.168.1.13:8000'), 'http://192.168.1.13:8000');
+      expect(normalizarUrl(' http://192.168.1.13:8000/ '), 'http://192.168.1.13:8000');
+      expect(normalizarUrl('https://abc.devtunnels.ms'), 'https://abc.devtunnels.ms');
+    });
+
+    test('rechaza lo que no es una dirección de servidor', () {
+      expect(normalizarUrl(''), isNull);
+      expect(normalizarUrl('ftp://192.168.1.13'), isNull);
+      expect(normalizarUrl('http://192.168.1.13:8000/api/rutas'), isNull);
+      expect(normalizarUrl('http://'), isNull);
     });
   });
 }

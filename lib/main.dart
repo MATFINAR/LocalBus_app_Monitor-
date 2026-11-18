@@ -2,10 +2,15 @@ import 'package:flutter/material.dart';
 import 'screens/mapa_screen.dart';
 import 'screens/rutas_screen.dart';
 import 'screens/alertas_screen.dart';
+import 'screens/ajustes_screen.dart';
+import 'servidor.dart';
 import 'tema.dart';
 import 'utils/seleccion.dart';
 
-void main() {
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  // La dirección del servidor guardada en Ajustes, antes de la primera consulta
+  await Servidor.instancia.cargar();
   runApp(const MonitorApp());
 }
 
@@ -40,15 +45,18 @@ class _MainNavigationState extends State<MainNavigation> {
   // Se crean una sola vez: IndexedStack las mantiene vivas al cambiar de pestaña, así el mapa
   // conserva su zoom y posición y no se vuelve a descargar todo cada vez.
   late final List<Widget> _screens = [
-    MapaScreen(seleccion: _seleccion),
-    RutasScreen(onVerEnMapa: _verEnMapa),
-    AlertasScreen(onVerEnMapa: _verEnMapa),
+    MapaScreen(seleccion: _seleccion, onAbrirAjustes: _abrirAjustes),
+    RutasScreen(onVerEnMapa: _verEnMapa, onAbrirAjustes: _abrirAjustes),
+    AlertasScreen(onVerEnMapa: _verEnMapa, onAbrirAjustes: _abrirAjustes),
+    const AjustesScreen(),
   ];
 
   void _verEnMapa(int rutaId) {
     _seleccion.elegir(rutaId);
     setState(() => _currentIndex = 0);
   }
+
+  void _abrirAjustes() => setState(() => _currentIndex = 3);
 
   @override
   void dispose() {
@@ -79,6 +87,7 @@ class _BarraPestanas extends StatelessWidget {
     (Icons.map_outlined, Icons.map, 'Mapa'),
     (Icons.alt_route, Icons.alt_route, 'Rutas'),
     (Icons.notifications_none, Icons.notifications, 'Alertas'),
+    (Icons.settings_outlined, Icons.settings, 'Ajustes'),
   ];
 
   @override

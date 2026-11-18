@@ -7,6 +7,7 @@ import '../models/alerta.dart';
 import '../models/bus_ubicacion.dart';
 import '../models/ruta.dart';
 import '../services/api_service.dart';
+import '../servidor.dart';
 import '../tema.dart';
 import '../utils/estados.dart';
 import '../utils/formato.dart';
@@ -17,7 +18,10 @@ import '../widgets/comunes.dart';
 class MapaScreen extends StatefulWidget {
   final SeleccionRuta seleccion;
 
-  const MapaScreen({super.key, required this.seleccion});
+  /// Lleva a Ajustes para corregir la dirección del servidor.
+  final VoidCallback onAbrirAjustes;
+
+  const MapaScreen({super.key, required this.seleccion, required this.onAbrirAjustes});
 
   @override
   State<MapaScreen> createState() => _MapaScreenState();
@@ -53,6 +57,7 @@ class _MapaScreenState extends State<MapaScreen> with WidgetsBindingObserver {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     widget.seleccion.addListener(_alCambiarSeleccion);
+    Servidor.instancia.addListener(_alCambiarServidor);
     _cargarDatos();
     _iniciarConsultas();
   }
@@ -61,6 +66,7 @@ class _MapaScreenState extends State<MapaScreen> with WidgetsBindingObserver {
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     widget.seleccion.removeListener(_alCambiarSeleccion);
+    Servidor.instancia.removeListener(_alCambiarServidor);
     _detenerConsultas();
     super.dispose();
   }
@@ -133,6 +139,21 @@ class _MapaScreenState extends State<MapaScreen> with WidgetsBindingObserver {
     } catch (e) {
       debugPrint('Error al cargar alertas: $e');
     }
+  }
+
+  /// Otro servidor: lo de antes no vale (otras rutas, otros ids). Se empieza de cero.
+  void _alCambiarServidor() {
+    if (!mounted) return;
+    setState(() {
+      _buses = [];
+      _rutas = [];
+      _alertas = [];
+      _errorConexion = null;
+      _ultimaActualizacion = null;
+      _cargando = true;
+    });
+    if (widget.seleccion.rutaId != null) widget.seleccion.elegir(null);
+    _cargarDatos();
   }
 
   // ===== Ruta elegida =====
@@ -496,6 +517,15 @@ class _MapaScreenState extends State<MapaScreen> with WidgetsBindingObserver {
                         ? 'Reintentando…'
                         : 'Reintentando… Las posiciones son de las ${horaConSegundos(ultima)}.',
                     style: TextStyle(color: texto, fontSize: 12),
+                  ),
+                  TextButton(
+                    onPressed: widget.onAbrirAjustes,
+                    style: TextButton.styleFrom(
+                      foregroundColor: texto,
+                      padding: EdgeInsets.zero,
+                      minimumSize: const Size(0, 36),
+                    ),
+                    child: const Text('Cambiar servidor', style: TextStyle(decoration: TextDecoration.underline)),
                   ),
                 ],
               ),

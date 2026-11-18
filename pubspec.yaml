@@ -15,6 +15,8 @@ dependencies:
   latlong2: ^0.9.0
   # Tipografías de la marca (Barlow Condensed y Atkinson Hyperlegible), las mismas de la web
   google_fonts: ^6.2.1
+  # Guarda la dirección del servidor elegida en Ajustes
+  shared_preferences: ^2.3.0
 
 dev_dependencies:
   flutter_test:
