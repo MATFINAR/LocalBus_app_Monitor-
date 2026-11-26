@@ -121,32 +121,36 @@ class _PerfilScreenState extends State<PerfilScreen> {
           margin: const EdgeInsets.only(top: 24),
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(color: lb.concreto, borderRadius: BorderRadius.circular(AppTheme.radio)),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text('Ajustes', style: AppTheme.titulo(size: 22, color: lb.tinta)),
-              const SizedBox(height: 10),
-              Text('Tema de la app', style: TextStyle(fontWeight: FontWeight.w700, color: lb.tinta)),
-              for (final (valor, titulo, texto) in [
-                ('sistema', 'Igual que el dispositivo', 'Claro u oscuro, según cómo tengas tu celular.'),
-                ('claro', 'Claro', 'Fondo blanco siempre.'),
-                ('oscuro', 'Oscuro', 'Fondo oscuro siempre. Cansa menos la vista de noche.'),
-              ])
-                RadioListTile<String>(
-                  value: valor,
-                  groupValue: u.tema == 'claro' || u.tema == 'oscuro' ? u.tema : 'sistema',
-                  onChanged: _guardandoTema ? null : (v) => _elegirTema(v!),
-                  contentPadding: EdgeInsets.zero,
-                  dense: true,
-                  title: Text(titulo, style: TextStyle(fontWeight: FontWeight.w700, color: lb.tinta, fontSize: 15)),
-                  subtitle: Text(texto, style: TextStyle(color: lb.grisTexto, fontSize: 13)),
-                ),
-              if (_estadoTema != null)
-                Semantics(
-                  liveRegion: true,
-                  child: Text(_estadoTema!, style: TextStyle(fontSize: 13, color: lb.grisTexto)),
-                ),
-            ],
+          // Sin este Material, el color de la caja tapa el efecto al tocar las opciones
+          child: Material(
+            type: MaterialType.transparency,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('Ajustes', style: AppTheme.titulo(size: 22, color: lb.tinta)),
+                const SizedBox(height: 10),
+                Text('Tema de la app', style: TextStyle(fontWeight: FontWeight.w700, color: lb.tinta)),
+                for (final (valor, titulo, texto) in [
+                  ('sistema', 'Igual que el dispositivo', 'Claro u oscuro, según cómo tengas tu celular.'),
+                  ('claro', 'Claro', 'Fondo blanco siempre.'),
+                  ('oscuro', 'Oscuro', 'Fondo oscuro siempre. Cansa menos la vista de noche.'),
+                ])
+                  RadioListTile<String>(
+                    value: valor,
+                    groupValue: u.tema == 'claro' || u.tema == 'oscuro' ? u.tema : 'sistema',
+                    onChanged: _guardandoTema ? null : (v) => _elegirTema(v!),
+                    contentPadding: EdgeInsets.zero,
+                    dense: true,
+                    title: Text(titulo, style: TextStyle(fontWeight: FontWeight.w700, color: lb.tinta, fontSize: 15)),
+                    subtitle: Text(texto, style: TextStyle(color: lb.grisTexto, fontSize: 13)),
+                  ),
+                if (_estadoTema != null)
+                  Semantics(
+                    liveRegion: true,
+                    child: Text(_estadoTema!, style: TextStyle(fontSize: 13, color: lb.grisTexto)),
+                  ),
+              ],
+            ),
           ),
         ),
         const SizedBox(height: 22),
@@ -237,7 +241,7 @@ class _EditarPerfilState extends State<_EditarPerfil> {
         'nickName': _nick.text.trim(),
         'telefono': _telefono.text.trim(),
         'color_perfil': _color,
-      });
+      }, Api.esperaCorreo); // si cambia el correo, el servidor envía un código
       await Sesion.i.actualizarUsuario(Usuario.fromJson(d['usuario'] as Map<String, dynamic>));
       if (!mounted) return;
       Mensajes.mostrar('${d['mensaje']}', nivel: nivelDesdeTexto(d['nivel'] as String?));

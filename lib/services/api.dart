@@ -32,6 +32,10 @@ class Api {
 
   static const Duration _espera = Duration(seconds: 15);
 
+  /// Para las peticiones que envían un correo (registro, recuperar la contraseña, cambiar el correo): el
+  /// servidor espera al proveedor de correo hasta 10 s antes de responder.
+  static const Duration esperaCorreo = Duration(seconds: 35);
+
   static Uri _uri(String ruta, [Map<String, String>? q]) {
     final camino = ruta.startsWith('/') ? ruta : '/api/movil/$ruta';
     final uri = Uri.parse('${ServerConfig.url}$camino');
@@ -50,13 +54,13 @@ class Api {
   static Future<Map<String, dynamic>> get(String ruta, {Map<String, String>? q}) =>
       _enviar(() => http.get(_uri(ruta, q), headers: _cabeceras()));
 
-  static Future<Map<String, dynamic>> post(String ruta, [Map<String, dynamic> datos = const {}]) =>
-      _enviar(() => http.post(_uri(ruta), headers: _cabeceras(), body: jsonEncode(datos)));
+  static Future<Map<String, dynamic>> post(String ruta, [Map<String, dynamic> datos = const {}, Duration? espera]) =>
+      _enviar(() => http.post(_uri(ruta), headers: _cabeceras(), body: jsonEncode(datos)), espera);
 
-  static Future<Map<String, dynamic>> _enviar(Future<http.Response> Function() pedir) async {
+  static Future<Map<String, dynamic>> _enviar(Future<http.Response> Function() pedir, [Duration? espera]) async {
     final http.Response respuesta;
     try {
-      respuesta = await pedir().timeout(_espera);
+      respuesta = await pedir().timeout(espera ?? _espera);
     } on TimeoutException {
       throw ApiError('El servidor tarda en responder. Revisa tu conexión e inténtalo de nuevo.', 0);
     } catch (_) {

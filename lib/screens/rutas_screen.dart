@@ -10,6 +10,7 @@ import '../services/api.dart';
 import '../services/server_config.dart';
 import '../services/ubicacion.dart';
 import '../theme/app_theme.dart';
+import '../widgets/caja_con_franja.dart';
 import '../widgets/common_widgets.dart';
 import '../widgets/lb.dart';
 
@@ -464,17 +465,15 @@ class FichaRuta extends StatelessWidget {
 
     if (globo) return contenido;
     if (tarjeta) {
-      return Container(
+      return CajaConFranja(
         padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
-        decoration: BoxDecoration(
-          color: lb.blanco,
-          borderRadius: BorderRadius.circular(AppTheme.radio),
-          border: Border(
+        color: lb.blanco,
+        radio: AppTheme.radio,
+        borde: Border(
             left: BorderSide(color: r.color, width: 5),
             top: BorderSide(color: lb.linea),
             right: BorderSide(color: lb.linea),
             bottom: BorderSide(color: lb.linea),
-          ),
         ),
         child: contenido,
       );

@@ -163,7 +163,7 @@ class _ServidorDialogState extends State<_ServidorDialog> {
               )
             else
               Text(
-                'La IP de tu computador en la red Wi‑Fi. Si no escribes puerto, se usa el 8000.',
+                'Un dominio de internet o la IP de tu computador en la red Wi‑Fi (puerto 8000 si no escribes otro).',
                 style: TextStyle(color: lb.grisTexto, fontSize: 13.5),
               ),
           ],

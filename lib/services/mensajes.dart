@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../theme/app_theme.dart';
+import '../widgets/caja_con_franja.dart';
 
 /// Nivel de un mensaje: el color de la franja izquierda, como .base-message-* de la web.
 enum Nivel { success, error, warning, info }
@@ -152,16 +153,14 @@ class _MensajeCajaState extends State<_MensajeCaja> with SingleTickerProviderSta
                       Mensajes.cerrar(m);
                       m.alTocar!();
                     },
-              child: Container(
-                decoration: BoxDecoration(
-                  border: Border(
+              child: CajaConFranja(
+                radio: AppTheme.radio,
+                sombra: const [BoxShadow(color: Color(0x2E000000), blurRadius: 10, offset: Offset(0, 2))],
+                borde: Border(
                     left: BorderSide(color: franja, width: 5),
                     top: BorderSide(color: lb.linea),
                     right: BorderSide(color: lb.linea),
                     bottom: BorderSide(color: lb.linea),
-                  ),
-                  borderRadius: BorderRadius.circular(AppTheme.radio),
-                  boxShadow: const [BoxShadow(color: Color(0x2E000000), blurRadius: 10, offset: Offset(0, 2))],
                 ),
                 padding: const EdgeInsets.fromLTRB(16, 10, 6, 10),
                 child: Row(
@@ -186,9 +185,9 @@ class _MensajeCajaState extends State<_MensajeCaja> with SingleTickerProviderSta
                     ),
                     IconButton(
                       onPressed: () => Mensajes.cerrar(m),
-                      tooltip: 'Cerrar',
+                      // Sin tooltip: los mensajes van por encima del navegador y allí no hay Overlay que lo muestre
                       style: IconButton.styleFrom(foregroundColor: lb.grisTexto, minimumSize: const Size(36, 36)),
-                      icon: const Text('×', style: TextStyle(fontSize: 22, height: 1)),
+                      icon: const Text('×', semanticsLabel: 'Cerrar', style: TextStyle(fontSize: 22, height: 1)),
                     ),
                   ],
                 ),

@@ -10,6 +10,7 @@ import '../services/mensajes.dart';
 import '../services/navegacion.dart';
 import '../services/sesion.dart';
 import '../theme/app_theme.dart';
+import '../widgets/caja_con_franja.dart';
 import '../widgets/lb.dart';
 import 'acerca_screen.dart';
 import 'perfil_screen.dart';
@@ -100,16 +101,14 @@ class TarjetaAcceso extends StatelessWidget {
                   label: const Text('Volver'),
                 ),
               ),
-            Container(
-              decoration: BoxDecoration(
-                color: lb.blanco,
-                border: Border(
+            CajaConFranja(
+              color: lb.blanco,
+              radio: AppTheme.radioVentana,
+              borde: Border(
                   top: BorderSide(color: lb.tinta, width: 4),
                   left: BorderSide(color: lb.linea),
                   right: BorderSide(color: lb.linea),
                   bottom: BorderSide(color: lb.linea),
-                ),
-                borderRadius: BorderRadius.circular(AppTheme.radioVentana),
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -341,15 +340,7 @@ class VerificadorDisponible {
       if (pedido != _pedido) return;
       final existe = d['existe'] == true;
       estado = existe ? EstadoCampo.mal : EstadoCampo.bien;
-      mensaje = switch ((campo, existe)) {
-        ('email', true) => '❌ Este correo ya está en uso',
-        ('email', false) => '✓ Correo disponible',
-        ('nickname', true) => '❌ Este nombre de usuario ya está en uso',
-        ('nickname', false) => '✓ Nombre de usuario disponible',
-        (_, true) => '❌ Este teléfono ya está registrado',
-        _ => '✓ Teléfono disponible',
-      };
-      sugerencias = (d['sugerencias'] as List? ?? []).map((s) => '$s').toList();
+      _marcar(existe, (d['sugerencias'] as List? ?? []).map((s) => '$s').toList());
     } on ApiError catch (e) {
       if (pedido != _pedido) return;
       estado = EstadoCampo.ninguno;
@@ -358,8 +349,45 @@ class VerificadorDisponible {
     alCambiar();
   }
 
+  /// Los mismos textos que registro.js en la web.
+  void _marcar(bool existe, List<String> nuevas) {
+    estado = existe ? EstadoCampo.mal : EstadoCampo.bien;
+    mensaje = switch ((campo, existe)) {
+      ('email', true) => 'Este correo ya tiene una cuenta. Inicia sesión o usa otro.',
+      ('email', false) => 'Correo disponible',
+      ('nickname', true) => 'Este nombre de usuario ya está en uso. Prueba con otro.',
+      ('nickname', false) => 'Nombre de usuario disponible',
+      (_, true) => 'Este teléfono ya tiene una cuenta. Usa otro.',
+      _ => 'Teléfono disponible',
+    };
+    sugerencias = nuevas;
+  }
+
+  /// Comprobación al enviar (como la web antes de mandar el formulario): devuelve si el dato ya está en uso y
+  /// actualiza el aviso del campo. Sin conexión devuelve false: el servidor lo vuelve a revisar al registrar.
+  Future<bool> comprobarAhora(String valor) async {
+    _timer?.cancel();
+    final pedido = ++_pedido;
+    try {
+      final d = await Api.post('disponible/', {'campo': campo, 'valor': valor});
+      final existe = d['existe'] == true;
+      if (pedido == _pedido) {
+        _marcar(existe, (d['sugerencias'] as List? ?? []).map((s) => '$s').toList());
+        alCambiar();
+      }
+      return existe;
+    } on ApiError {
+      return false;
+    }
+  }
+
   void cancelar() => _timer?.cancel();
 }
+
+/// Correo con forma válida (la misma expresión que registro.js).
+final RegExp _formatoCorreo = RegExp(r'^[^\s@]+@[^\s@]+\.[^\s@]+$');
+
+const String _correoInvalido = 'Escribe un correo válido, por ejemplo tu@correo.com';
 
 /// Barra de fuerza de la contraseña (registro.js): 4 niveles.
 class FuerzaContrasena extends StatelessWidget {
@@ -441,59 +469,118 @@ class _RegistroScreenState extends State<RegistroScreen> {
     super.dispose();
   }
 
+  /// Reglas del servidor (largo, común, solo números, parecida a tus datos). Devuelve el error o null; sin
+  /// conexión devuelve null y el servidor lo vuelve a revisar al registrar.
+  Future<String?> _reglasClave() async {
+    try {
+      final d = await Api.post('contrasena/', {
+        'password': _clave.text,
+        'nombre': _nombre.text.trim(),
+        'apellido': _apellido.text.trim(),
+        'email': _email.text.trim().toLowerCase(),
+        'username': _usuario.text.trim(),
+      });
+      return d['error'] as String?;
+    } on ApiError {
+      return null;
+    }
+  }
+
   void _revisarClave() {
     _timerClave?.cancel();
-    if (_clave.text.isEmpty) {
-      setState(() => _errorClave = null);
-      return;
-    }
-    _timerClave = Timer(const Duration(milliseconds: 600), () async {
-      try {
-        final d = await Api.post('contrasena/', {
-          'password': _clave.text,
-          'nombre': _nombre.text.trim(),
-          'apellido': _apellido.text.trim(),
-          'email': _email.text.trim(),
-          'username': _usuario.text.trim(),
-        });
-        if (mounted) setState(() => _errorClave = d['error'] as String?);
-      } on ApiError {
-        // Sin conexión: el servidor lo vuelve a revisar al enviar
-      }
+    // Mientras se escribe se quita el aviso anterior; el nuevo llega tras una pausa (como en la web)
+    setState(() => _errorClave = null);
+    if (_clave.text.isEmpty) return;
+    _timerClave = Timer(const Duration(milliseconds: 500), () async {
+      final error = await _reglasClave();
+      if (mounted) setState(() => _errorClave = error);
     });
   }
 
-  Future<void> _enviar() async {
-    final faltan = [_nombre, _apellido, _email, _usuario, _clave].any((c) => c.text.trim().isEmpty);
-    String? error;
-    if (faltan) {
-      error = 'Completa todos los campos obligatorios.';
-    } else if (_clave.text != _clave2.text) {
-      error = 'Las contraseñas no coinciden.';
-    } else if (!_terminos) {
-      error = 'Para crear la cuenta debes aceptar los términos y condiciones y la política de privacidad.';
-    } else if ([_vEmail, _vUsuario, _vTelefono].any((v) => v.estado == EstadoCampo.mal)) {
-      error = 'Revisa los campos marcados en rojo antes de continuar.';
+  /// Si cambian el nombre, el correo o el usuario, «parecida a tus datos» puede cambiar (como en la web).
+  void _alCambiarDato() {
+    if (_clave.text.isNotEmpty) _revisarClave();
+  }
+
+  void _mostrarError(String texto) => setState(() {
+        _enviando = false;
+        _error = texto;
+      });
+
+  /// Las mismas validaciones y en el mismo orden que registro.js antes de enviar el formulario.
+  String? _errorLocal() {
+    final email = _email.text.trim();
+    final usuario = _usuario.text.trim();
+    final telefono = _telefono.text.trim();
+    if ([_nombre, _apellido, _email, _usuario, _clave].any((c) => c.text.trim().isEmpty)) {
+      return 'Completa todos los campos obligatorios.';
     }
-    if (error != null) {
-      setState(() => _error = error);
+    if (!_formatoCorreo.hasMatch(email)) return '$_correoInvalido.';
+    if (_vEmail.estado == EstadoCampo.mal) return 'Ese correo ya tiene una cuenta. Inicia sesión o usa otro.';
+    if (!RegExp(r'^[a-zA-Z0-9._]{3,30}$').hasMatch(usuario) || _vUsuario.estado == EstadoCampo.mal) {
+      return 'Corrige el nombre de usuario: está en uso o tiene caracteres no permitidos.';
+    }
+    if ((telefono.isNotEmpty && !RegExp(r'^\d{7,15}$').hasMatch(telefono)) || _vTelefono.estado == EstadoCampo.mal) {
+      return 'Corrige el teléfono: ya tiene una cuenta o tiene menos de 7 dígitos.';
+    }
+    if (_clave.text != _clave2.text) return 'Las contraseñas no coinciden. Escríbelas de nuevo.';
+    if (_clave.text.length < 8) return 'La contraseña debe tener al menos 8 caracteres.';
+    if (_errorClave != null) return 'Cambia la contraseña: $_errorClave';
+    if (!_terminos) return 'Para crear tu cuenta, acepta los términos y condiciones.';
+    return null;
+  }
+
+  /// Antes de enviar se comprueba todo contra el servidor (correo, usuario, teléfono y contraseña), como la web:
+  /// así no se manda nada con errores aunque las comprobaciones en vivo no hubieran terminado.
+  Future<String?> _errorEnServidor() async {
+    final telefono = _telefono.text.trim();
+    final r = await Future.wait<Object?>([
+      _vEmail.comprobarAhora(_email.text.trim().toLowerCase()),
+      _vUsuario.comprobarAhora(_usuario.text.trim()),
+      telefono.length >= 7 ? _vTelefono.comprobarAhora(telefono) : Future.value(false),
+      _reglasClave(),
+    ]);
+    if (r[0] == true) return 'Ese correo ya tiene una cuenta. Inicia sesión o usa otro.';
+    if (r[1] == true) return 'Ese nombre de usuario ya está en uso. Elige otro.';
+    if (r[2] == true) return 'Ese teléfono ya tiene una cuenta. Usa otro.';
+    if (r[3] is String) {
+      if (mounted) setState(() => _errorClave = r[3] as String);
+      return 'Cambia la contraseña: ${r[3]}';
+    }
+    return null;
+  }
+
+  Future<void> _enviar() async {
+    if (_enviando) return;
+    final local = _errorLocal();
+    if (local != null) {
+      _mostrarError(local);
       return;
     }
     setState(() {
       _enviando = true;
       _error = null;
     });
+    final enServidor = await _errorEnServidor();
+    if (!mounted) return;
+    if (enServidor != null) {
+      _mostrarError(enServidor);
+      return;
+    }
     try {
-      final d = await Api.post('registro/', {
-        'nombre': _nombre.text.trim(),
-        'apellido': _apellido.text.trim(),
-        'email': _email.text.trim(),
-        'username': _usuario.text.trim(),
-        'password': _clave.text,
-        'password2': _clave2.text,
-        'telefono': _telefono.text.trim(),
-        'terminos': _terminos,
-      });
+      final d = await Api.post(
+          'registro/',
+          {
+            'nombre': _nombre.text.trim(),
+            'apellido': _apellido.text.trim(),
+            'email': _email.text.trim().toLowerCase(),
+            'username': _usuario.text.trim(),
+            'password': _clave.text,
+            'password2': _clave2.text,
+            'telefono': _telefono.text.trim(),
+            'terminos': _terminos,
+          },
+          Api.esperaCorreo);
       if (!mounted) return;
       setState(() => _enviando = false);
       final pendiente = '${d['pendiente']}';
@@ -539,6 +626,7 @@ class _RegistroScreenState extends State<RegistroScreen> {
             maxLength: 49,
             mayusculas: TextCapitalization.words,
             autofill: const [AutofillHints.givenName],
+            onChanged: (_) => _alCambiarDato(),
             accion: TextInputAction.next),
         LbCampo(
             etiqueta: 'Apellido',
@@ -547,6 +635,7 @@ class _RegistroScreenState extends State<RegistroScreen> {
             maxLength: 49,
             mayusculas: TextCapitalization.words,
             autofill: const [AutofillHints.familyName],
+            onChanged: (_) => _alCambiarDato(),
             accion: TextInputAction.next),
         LbCampo(
           etiqueta: 'Correo electrónico',
@@ -561,8 +650,8 @@ class _RegistroScreenState extends State<RegistroScreen> {
           ayuda: 'Usaremos este correo para enviarte alertas.',
           onChanged: (v) {
             final t = v.trim().toLowerCase();
-            _vEmail.revisar(t,
-                formatoMalo: RegExp(r'^[^\s@]+@[^\s@]+\.[^\s@]+$').hasMatch(t) ? null : '⚠️ Ingresa un correo válido');
+            _vEmail.revisar(t, formatoMalo: _formatoCorreo.hasMatch(t) ? null : _correoInvalido);
+            _alCambiarDato();
           },
         ),
         LbCampo(
@@ -579,7 +668,8 @@ class _RegistroScreenState extends State<RegistroScreen> {
             _vUsuario.revisar(t,
                 formatoMalo: RegExp(r'^[a-zA-Z0-9._]{3,30}$').hasMatch(t)
                     ? null
-                    : '⚠️ Solo letras, números, puntos y guiones (3-30 caracteres)');
+                    : 'Usa entre 3 y 30 caracteres: letras, números, puntos o guiones bajos.');
+            _alCambiarDato();
           },
           extra: _Sugerencias(
             sugerencias: _vUsuario.sugerencias,
@@ -627,7 +717,7 @@ class _RegistroScreenState extends State<RegistroScreen> {
           mensaje: _vTelefono.mensaje,
           ayuda: 'Solo números, entre 7 y 15 dígitos.',
           onChanged: (v) => _vTelefono.revisar(v,
-              formatoMalo: v.isEmpty || RegExp(r'^\d{7,15}$').hasMatch(v) ? null : '⚠️ Debe tener entre 7 y 15 dígitos'),
+              formatoMalo: v.isEmpty || RegExp(r'^\d{7,15}$').hasMatch(v) ? null : 'Escribe al menos 7 dígitos.'),
         ),
         _Casilla(
           valor: _terminos,
@@ -670,7 +760,7 @@ class _Sugerencias extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.only(top: 8),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Text('💡 Sugerencias disponibles:', style: TextStyle(fontSize: 12.8, color: lb.grisTexto)),
+        Text('Estos nombres están disponibles:', style: TextStyle(fontSize: 12.8, color: lb.grisTexto)),
         const SizedBox(height: 6),
         Wrap(spacing: 6, runSpacing: 6, children: [
           for (final s in sugerencias)
@@ -814,6 +904,7 @@ class _RecuperarScreenState extends State<RecuperarScreen> {
   final _email = TextEditingController();
   bool _enviando = false;
   String? _error;
+  String? _errorEmail;
 
   @override
   void dispose() {
@@ -822,9 +913,18 @@ class _RecuperarScreenState extends State<RecuperarScreen> {
   }
 
   Future<void> _enviar() async {
+    if (_enviando) return;
     final email = _email.text.trim().toLowerCase();
+    // Como la web: el correo es obligatorio y debe tener forma de correo (campo type="email")
     if (email.isEmpty) {
       setState(() => _error = 'Escribe tu correo.');
+      return;
+    }
+    if (!_formatoCorreo.hasMatch(email)) {
+      setState(() {
+        _errorEmail = _correoInvalido;
+        _error = '$_correoInvalido.';
+      });
       return;
     }
     setState(() {
@@ -832,7 +932,7 @@ class _RecuperarScreenState extends State<RecuperarScreen> {
       _error = null;
     });
     try {
-      final d = await Api.post('recuperar/', {'email': email});
+      final d = await Api.post('recuperar/', {'email': email}, Api.esperaCorreo);
       if (!mounted) return;
       setState(() => _enviando = false);
       Mensajes.mostrar('${d['mensaje']}');
@@ -872,8 +972,22 @@ class _RecuperarScreenState extends State<RecuperarScreen> {
           etiqueta: 'Correo electrónico',
           controller: _email,
           hint: 'tu@correo.com',
+          maxLength: 100,
           teclado: TextInputType.emailAddress,
           autofill: const [AutofillHints.email],
+          estado: _errorEmail != null ? EstadoCampo.mal : EstadoCampo.ninguno,
+          mensaje: _errorEmail,
+          ayuda: 'Te enviaremos un código de 6 dígitos a este correo.',
+          onChanged: (v) {
+            final t = v.trim();
+            final nuevo = t.isEmpty || _formatoCorreo.hasMatch(t) ? null : _correoInvalido;
+            if (nuevo != _errorEmail || _error != null) {
+              setState(() {
+                _errorEmail = nuevo;
+                _error = null;
+              });
+            }
+          },
           onSubmitted: (_) => _enviar(),
         ),
         LbBoton('Enviar código', ancho: true, cargando: _enviando, onPressed: _enviar),
@@ -896,17 +1010,54 @@ class _NuevaContrasenaState extends State<_NuevaContrasena> {
   final _clave2 = TextEditingController();
   bool _enviando = false;
   String? _error;
+  String? _errorClave;
+  Timer? _timerClave;
 
   @override
   void dispose() {
     _clave.dispose();
     _clave2.dispose();
+    _timerClave?.cancel();
     super.dispose();
   }
 
+  /// Las reglas del servidor con los datos de la cuenta que se recupera (el permiso la identifica).
+  Future<String?> _reglasClave() async {
+    try {
+      final d = await Api.post('contrasena/', {'password': _clave.text, 'permiso': widget.permiso});
+      return d['error'] as String?;
+    } on ApiError {
+      return null; // sin conexión: el servidor lo vuelve a revisar al guardar
+    }
+  }
+
+  void _revisarClave() {
+    _timerClave?.cancel();
+    setState(() {
+      _errorClave = null;
+      _error = null;
+    });
+    if (_clave.text.isEmpty) return;
+    _timerClave = Timer(const Duration(milliseconds: 500), () async {
+      final error = await _reglasClave();
+      if (mounted) setState(() => _errorClave = error);
+    });
+  }
+
+  /// Las mismas reglas que la página «Nueva contraseña» de la web antes de enviar.
+  String? _errorLocal() {
+    if (_clave.text.isEmpty) return 'Escribe la nueva contraseña.';
+    if (_clave.text.length < 8) return 'La contraseña debe tener al menos 8 caracteres.';
+    if (_clave.text != _clave2.text) return 'Las contraseñas no coinciden.';
+    if (_errorClave != null) return 'Cambia la contraseña: $_errorClave';
+    return null;
+  }
+
   Future<void> _enviar() async {
-    if (_clave.text.isEmpty || _clave.text != _clave2.text) {
-      setState(() => _error = 'Las contraseñas no coinciden.');
+    if (_enviando) return;
+    final local = _errorLocal();
+    if (local != null) {
+      setState(() => _error = local);
       return;
     }
     setState(() {
@@ -923,7 +1074,7 @@ class _NuevaContrasenaState extends State<_NuevaContrasena> {
       Mensajes.mostrar('${d['mensaje']}');
       Navigator.of(context).pushAndRemoveUntil(
         MaterialPageRoute(builder: (_) => LoginScreen(identificador: '${d['email']}')),
-        (_) => false,
+        (r) => r.isFirst,
       );
     } on ApiError catch (e) {
       if (!mounted) return;
@@ -951,8 +1102,11 @@ class _NuevaContrasenaState extends State<_NuevaContrasena> {
           controller: _clave,
           contrasena: true,
           autofill: const [AutofillHints.newPassword],
+          accion: TextInputAction.next,
+          estado: _errorClave != null ? EstadoCampo.mal : EstadoCampo.ninguno,
+          mensaje: _errorClave,
           ayuda: 'Mínimo 8 caracteres, que no sea solo números ni una contraseña común.',
-          onChanged: (_) => setState(() {}),
+          onChanged: (_) => _revisarClave(),
           extra: FuerzaContrasena(_clave.text),
         ),
         LbCampo(
@@ -960,6 +1114,13 @@ class _NuevaContrasenaState extends State<_NuevaContrasena> {
           controller: _clave2,
           contrasena: true,
           autofill: const [AutofillHints.newPassword],
+          onChanged: (_) => setState(() => _error = null),
+          estado: _clave2.text.isEmpty
+              ? EstadoCampo.ninguno
+              : (_clave2.text == _clave.text ? EstadoCampo.bien : EstadoCampo.mal),
+          mensaje: _clave2.text.isEmpty
+              ? null
+              : (_clave2.text == _clave.text ? '✓ Las contraseñas coinciden' : '❌ Las contraseñas no coinciden'),
           onSubmitted: (_) => _enviar(),
         ),
         LbBoton('Guardar contraseña', ancho: true, cargando: _enviando, onPressed: _enviar),

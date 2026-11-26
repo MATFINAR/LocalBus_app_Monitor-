@@ -60,5 +60,8 @@ void main() {
     expect(ServerConfig.normalizar('192.168.1.13'), 'http://192.168.1.13:8000');
     expect(ServerConfig.normalizar('http://192.168.1.13:8000/'), 'http://192.168.1.13:8000');
     expect(ServerConfig.normalizar('no es una ip'), isNull);
+    expect(ServerConfig.normalizar('localbus.up.railway.app/'), 'https://localbus.up.railway.app');
+    expect(ServerConfig.normalizar('http://localbus.up.railway.app'), 'https://localbus.up.railway.app');
+    expect(ServerConfig.normalizar(ServerConfig.porDefecto), ServerConfig.porDefecto);
   });
 }

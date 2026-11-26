@@ -10,6 +10,7 @@ import '../services/server_config.dart';
 import '../services/sesion.dart';
 import '../services/ubicacion.dart';
 import '../theme/app_theme.dart';
+import '../widgets/caja_con_franja.dart';
 import '../widgets/common_widgets.dart';
 import '../widgets/lb.dart';
 
@@ -415,16 +416,14 @@ class _TarjetaAlerta extends StatelessWidget {
         child: InkWell(
           onTap: onTap,
           borderRadius: BorderRadius.circular(AppTheme.radio),
-          child: Container(
+          child: CajaConFranja(
             padding: const EdgeInsets.fromLTRB(18, 16, 18, 14),
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(AppTheme.radio),
-              border: Border(
+            radio: AppTheme.radio,
+            borde: Border(
                 left: BorderSide(color: colorTipo(context, a.tipo), width: 5),
                 top: BorderSide(color: lb.linea),
                 right: BorderSide(color: lb.linea),
                 bottom: BorderSide(color: lb.linea),
-              ),
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,

@@ -1,6 +1,8 @@
 import 'dart:math' as math;
 
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../services/api.dart';
@@ -8,6 +10,7 @@ import '../services/navegacion.dart';
 import '../services/server_config.dart';
 import '../theme/app_theme.dart';
 import '../widgets/lb.dart';
+import '../widgets/servidor_dialog.dart';
 
 /// Acerca de (acerca_de.html): presentación animada por escenas, cifras reales de la red y quiénes somos.
 class AcercaScreen extends StatefulWidget {
@@ -57,7 +60,6 @@ class _AcercaScreenState extends State<AcercaScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final lb = context.lb;
     return Scaffold(
       body: SafeArea(
         bottom: false,
@@ -164,11 +166,39 @@ class _AcercaScreenState extends State<AcercaScreen> {
               ),
             ),
             const _Pie(),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-              child: Text('Servidor: ${ServerConfig.url}', style: TextStyle(fontSize: 11.5, color: lb.grisTexto)),
-            ),
+            const _Servidor(),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Dirección del servidor, al final de la pantalla. Mantenerla presionada 15 segundos permite cambiarla.
+class _Servidor extends StatelessWidget {
+  const _Servidor();
+
+  static const _espera = Duration(seconds: 15);
+
+  @override
+  Widget build(BuildContext context) {
+    return RawGestureDetector(
+      behavior: HitTestBehavior.opaque,
+      gestures: {
+        LongPressGestureRecognizer: GestureRecognizerFactoryWithHandlers<LongPressGestureRecognizer>(
+          () => LongPressGestureRecognizer(duration: _espera),
+          (r) => r.onLongPress = () {
+            HapticFeedback.mediumImpact();
+            mostrarDialogoServidor(context);
+          },
+        ),
+      },
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+        child: ValueListenableBuilder<int>(
+          valueListenable: ServerConfig.cambios,
+          builder: (context, _, _) => Text('Servidor: ${ServerConfig.url}',
+              style: TextStyle(fontSize: 11.5, color: context.lb.grisTexto)),
         ),
       ),
     );
