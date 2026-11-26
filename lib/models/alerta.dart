@@ -8,6 +8,36 @@ String nombreTipoAlerta(String tipo) => switch (tipo.toLowerCase()) {
       _ => 'Información',
     };
 
+/// Una de las rutas a las que afecta una alerta, con su propio estado: la empresa puede marcar la alerta
+/// resuelta en unas rutas y dejarla en proceso en otras.
+class RutaDeAlerta {
+  final int id;
+  final String codigo;
+  final String nombre;
+  final Color color;
+
+  /// En_proceso o Resuelta (en un reporte sin revisar, el estado de la alerta).
+  final String estado;
+
+  const RutaDeAlerta({
+    required this.id,
+    required this.codigo,
+    required this.nombre,
+    required this.color,
+    required this.estado,
+  });
+
+  factory RutaDeAlerta.fromJson(Map<String, dynamic> j) => RutaDeAlerta(
+        id: (j['id'] as num?)?.toInt() ?? 0,
+        codigo: '${j['codigo'] ?? ''}',
+        nombre: '${j['nombre'] ?? ''}',
+        color: colorDesdeHex(j['color']),
+        estado: '${j['estado'] ?? ''}',
+      );
+
+  bool get resuelta => estado == 'Resuelta';
+}
+
 /// Una alerta del centro de alertas (publicada o de «Mis reportes»).
 class Alerta {
   final int id;
@@ -36,6 +66,9 @@ class Alerta {
   /// Quien la creó puede editarla o inhabilitarla mientras siga pendiente.
   final bool editable;
 
+  /// Rutas a las que afecta, la principal primero. Vacía si el servidor no las envía (versión anterior).
+  final List<RutaDeAlerta> rutas;
+
   // Solo en «Mis reportes»
   final bool confirmacion;
   final String sumada;
@@ -59,6 +92,7 @@ class Alerta {
     required this.vence,
     required this.dePasajero,
     required this.editable,
+    this.rutas = const [],
     this.confirmacion = false,
     this.sumada = '',
     this.sumadaEmpresa = '',
@@ -82,6 +116,10 @@ class Alerta {
         vence: '${j['vence'] ?? ''}',
         dePasajero: j['de_pasajero'] == true,
         editable: j['editable'] == true,
+        rutas: [
+          for (final r in j['rutas'] as List? ?? const [])
+            if (r is Map<String, dynamic>) RutaDeAlerta.fromJson(r),
+        ],
         confirmacion: j['confirmacion'] == true,
         sumada: '${j['sumada'] ?? ''}',
         sumadaEmpresa: '${j['sumada_empresa'] ?? ''}',
@@ -90,6 +128,15 @@ class Alerta {
       );
 
   String get tipoNombre => nombreTipoAlerta(tipo);
+
+  /// Las demás rutas a las que afecta (sin la principal).
+  List<RutaDeAlerta> get otrasRutas => [for (final r in rutas) if (r.id != rutaId) r];
+
+  /// Cuántas de sus rutas ya están resueltas mientras la alerta sigue en proceso en otras.
+  int get rutasResueltas => estado == 'En_proceso' ? rutas.where((r) => r.resuelta).length : 0;
+
+  /// La alerta toca esta ruta (como principal o como ruta afectada): para el filtro «Ruta».
+  bool afectaRuta(int id) => id == rutaId || rutas.any((r) => r.id == id);
 
   /// Texto del estado en una alerta publicada.
   String get estadoTexto => estado == 'En_proceso' ? 'En proceso' : estado;

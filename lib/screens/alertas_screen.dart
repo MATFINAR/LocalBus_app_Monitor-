@@ -117,18 +117,24 @@ class _AlertasScreenState extends State<AlertasScreen> {
   List<Alerta> get _fuente => _vista == 'mios' ? _misReportes : _alertas;
 
   List<Alerta> get _filtradas => _fuente
-      .where((a) => (_tipo == 'all' || a.tipo == _tipo) && (_rutaFiltro == null || a.rutaId == _rutaFiltro))
+      .where((a) => (_tipo == 'all' || a.tipo == _tipo) && (_rutaFiltro == null || a.afectaRuta(_rutaFiltro!)))
       .toList();
 
-  /// Solo las rutas que tienen alertas en la lista (filtro «Ruta»).
+  /// Solo las rutas que tienen alertas en la lista, también como ruta afectada (filtro «Ruta»).
   List<(int, String)> get _rutasFiltro {
-    final vistas = <int, Alerta>{for (final a in _alertas) a.rutaId: a};
-    final lista = vistas.values.toList()
+    final vistas = <int, (String codigo, String nombre)>{};
+    for (final a in _alertas) {
+      vistas[a.rutaId] = (a.rutaCodigo, a.rutaNombre);
+      for (final r in a.rutas) {
+        vistas[r.id] = (r.codigo, r.nombre);
+      }
+    }
+    final lista = vistas.entries.toList()
       ..sort((a, b) {
-        final n = a.rutaNombre.toLowerCase().compareTo(b.rutaNombre.toLowerCase());
-        return n != 0 ? n : a.rutaCodigo.compareTo(b.rutaCodigo);
+        final n = a.value.$2.toLowerCase().compareTo(b.value.$2.toLowerCase());
+        return n != 0 ? n : a.value.$1.compareTo(b.value.$1);
       });
-    return [for (final a in lista) (a.rutaId, '${a.rutaCodigo} · ${a.rutaNombre}')];
+    return [for (final e in lista) (e.key, '${e.value.$1} · ${e.value.$2}')];
   }
 
   int _contar(String tipo) => _alertas.where((a) => a.tipo == tipo).length;
@@ -439,6 +445,16 @@ class _TarjetaAlerta extends StatelessWidget {
                   const SizedBox(width: 10),
                   Expanded(child: Text(a.rutaNombre, style: AppTheme.titulo(size: 19.2, color: lb.tinta, height: 1.15))),
                 ]),
+                if (!mio && a.otrasRutas.isNotEmpty) ...[
+                  const SizedBox(height: 8),
+                  _PlacasRutas(
+                    titulo: 'También en',
+                    rutas: a.otrasRutas,
+                    nota: a.rutasResueltas > 0
+                        ? '${a.rutasResueltas} de ${a.rutas.length} resuelta${a.rutasResueltas == 1 ? '' : 's'}'
+                        : null,
+                  ),
+                ],
                 const SizedBox(height: 10),
                 Text(
                   mio && a.confirmacion ? 'Confirmaste esta alerta: «${a.sumada}»' : a.descripcion,
@@ -494,6 +510,41 @@ class _TarjetaAlerta extends StatelessWidget {
   }
 }
 
+/// Fila de placas de las rutas a las que afecta una alerta. Las resueltas en esa ruta van atenuadas.
+class _PlacasRutas extends StatelessWidget {
+  const _PlacasRutas({required this.titulo, required this.rutas, this.nota});
+
+  final String titulo;
+  final List<RutaDeAlerta> rutas;
+
+  /// Texto al final, por ejemplo «5 de 10 resueltas».
+  final String? nota;
+
+  @override
+  Widget build(BuildContext context) {
+    final lb = context.lb;
+    final estilo = TextStyle(fontSize: 12.8, fontWeight: FontWeight.w600, color: lb.grisTexto, height: 1.35);
+    return Wrap(
+      spacing: 6,
+      runSpacing: 6,
+      crossAxisAlignment: WrapCrossAlignment.center,
+      children: [
+        Text(titulo, style: estilo),
+        for (final r in rutas)
+          Semantics(
+            label: '${r.codigo}, ${r.nombre}${r.resuelta ? ', resuelta' : ''}',
+            excludeSemantics: true,
+            child: Opacity(
+              opacity: r.resuelta ? 0.45 : 1,
+              child: PlacaRuta(codigo: r.codigo, color: r.color, size: 13),
+            ),
+          ),
+        if (nota != null) Text('· $nota', style: estilo.copyWith(fontWeight: FontWeight.w400)),
+      ],
+    );
+  }
+}
+
 // ================= DETALLE =================
 
 class _Detalle extends StatefulWidget {
@@ -539,6 +590,18 @@ class _DetalleState extends State<_Detalle> {
       children: [
         if (_error != null) LbNota.error(context, _error!),
         LbDato(etiqueta: 'Ruta', valor: '${a.rutaCodigo} · ${a.rutaNombre}'),
+        if (a.rutas.length > 1)
+          LbDato(
+            etiqueta: 'Rutas afectadas',
+            hijo: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              if (a.rutas.any((r) => !r.resuelta))
+                _PlacasRutas(titulo: 'En proceso', rutas: [for (final r in a.rutas) if (!r.resuelta) r]),
+              if (a.rutas.any((r) => r.resuelta)) ...[
+                const SizedBox(height: 6),
+                _PlacasRutas(titulo: 'Resuelta en', rutas: [for (final r in a.rutas) if (r.resuelta) r]),
+              ],
+            ]),
+          ),
         LbDato(etiqueta: 'Tipo', hijo: Align(alignment: Alignment.centerLeft, child: EtiquetaTipo(a.tipo))),
         LbDato(etiqueta: 'Descripción', valor: a.descripcion),
         LbDato(etiqueta: 'Estado', valor: widget.mio ? a.estadoReporte : a.estadoTexto),
