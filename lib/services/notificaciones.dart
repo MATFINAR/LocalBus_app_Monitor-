@@ -38,7 +38,7 @@ class Notificaciones with WidgetsBindingObserver {
   Future<void> iniciar() async {
     try {
       await _plugin.initialize(
-        settings: const InitializationSettings(android: AndroidInitializationSettings('@mipmap/ic_launcher')),
+        settings: const InitializationSettings(android: AndroidInitializationSettings('@drawable/ic_notificacion')),
         onDidReceiveNotificationResponse: (_) => Navegacion.ir(Navegacion.alertas),
       );
       _listo = true;
