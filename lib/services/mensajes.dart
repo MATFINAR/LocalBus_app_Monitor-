@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../theme/app_theme.dart';
 import '../widgets/caja_con_franja.dart';
+import 'ventana_flotante.dart';
 
 /// Nivel de un mensaje: el color de la franja izquierda, como .base-message-* de la web.
 enum Nivel { success, error, warning, info }
@@ -61,15 +62,20 @@ class MensajesHost extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final relleno = MediaQuery.of(context).padding;
-    return Stack(
+    return ValueListenableBuilder<bool>(
+      valueListenable: VentanaFlotante.activa,
+      // En la ventana flotante no hay sitio para los mensajes: se ocultan
+      builder: (context, flotante, _) => Stack(
       children: [
         child,
+        if (!flotante)
         Positioned(
           top: relleno.top + 12,
           left: 12,
           right: 12,
           child: _Lista(Mensajes.arriba),
         ),
+        if (!flotante)
         Positioned(
           bottom: relleno.bottom + 84,
           left: 16,
@@ -77,6 +83,7 @@ class MensajesHost extends StatelessWidget {
           child: _Lista(Mensajes.abajo),
         ),
       ],
+      ),
     );
   }
 }

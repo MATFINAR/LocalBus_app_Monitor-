@@ -14,6 +14,7 @@ import '../services/notificaciones.dart';
 import '../services/server_config.dart';
 import '../services/sesion.dart';
 import '../services/ubicacion.dart';
+import '../services/ventana_flotante.dart';
 import '../theme/app_theme.dart';
 import '../widgets/common_widgets.dart';
 import '../widgets/lb.dart';
@@ -77,6 +78,10 @@ class _MapaScreenState extends State<MapaScreen> with SingleTickerProviderStateM
   bool _llegadaReintentando = false;
   Timer? _timerLlegada;
 
+  // Ventana flotante
+  bool _flotante = false;
+  ({LatLng centro, double zoom})? _camaraAntes;
+
   @override
   void initState() {
     super.initState();
@@ -85,6 +90,8 @@ class _MapaScreenState extends State<MapaScreen> with SingleTickerProviderStateM
     _timerBuses = Timer.periodic(const Duration(seconds: 5), (_) => _consultarBuses());
     ServerConfig.cambios.addListener(_alCambiarServidor);
     Sesion.i.addListener(_alCambiarSesion);
+    Navegacion.pestana.addListener(_alCambiarPestana);
+    VentanaFlotante.activa.addListener(_alCambiarVentana);
     Ubicacion.silenciosa().then((p) => _yo ??= p);
   }
 
@@ -93,6 +100,9 @@ class _MapaScreenState extends State<MapaScreen> with SingleTickerProviderStateM
     WidgetsBinding.instance.removeObserver(this);
     ServerConfig.cambios.removeListener(_alCambiarServidor);
     Sesion.i.removeListener(_alCambiarSesion);
+    Navegacion.pestana.removeListener(_alCambiarPestana);
+    VentanaFlotante.activa.removeListener(_alCambiarVentana);
+    VentanaFlotante.permitir(false);
     _timerBuses?.cancel();
     _timerLlegada?.cancel();
     _ticker.dispose();
@@ -106,6 +116,50 @@ class _MapaScreenState extends State<MapaScreen> with SingleTickerProviderStateM
   }
 
   void _alCambiarSesion() => setState(() {});
+
+  void _alCambiarPestana() => setState(() {});
+
+  // ================= VENTANA FLOTANTE =================
+
+  void _alCambiarVentana() {
+    final flotante = VentanaFlotante.activa.value;
+    if (flotante == _flotante) return;
+    if (flotante) _camaraAntes = (centro: _mapa.camera.center, zoom: _mapa.camera.zoom);
+    setState(() => _flotante = flotante);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      if (_flotante) {
+        _encuadrar();
+      } else if (_camaraAntes != null) {
+        _mapa.move(_camaraAntes!.centro, _camaraAntes!.zoom);
+      }
+    });
+  }
+
+  /// La ventana cambia de tamaño al entrar y cuando la persona la agranda: se vuelve a encuadrar.
+  @override
+  void didChangeMetrics() {
+    if (!_flotante) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && _flotante) _encuadrar();
+    });
+  }
+
+  /// El bus seleccionado, si lo hay.
+  int? get _busSeguido => _globo?.tipo == 'bus' && _posiciones.containsKey(_globo!.busId) ? _globo!.busId : null;
+
+  /// En la ventana flotante: centra el bus seleccionado o, si no hay, muestra toda la ruta.
+  void _encuadrar() {
+    final bus = _busSeguido;
+    if (bus != null) {
+      _mapa.move(_posicionDe(bus), 15);
+      return;
+    }
+    final puntos = _ruta?.coordenadas.map((c) => LatLng(c[1], c[0])).toList() ?? [];
+    if (puntos.length > 1) {
+      _mapa.fitCamera(CameraFit.bounds(bounds: LatLngBounds.fromPoints(puntos), padding: const EdgeInsets.all(14)));
+    }
+  }
 
   void _alCambiarServidor() {
     setState(() {
@@ -226,6 +280,7 @@ class _MapaScreenState extends State<MapaScreen> with SingleTickerProviderStateM
     final moviendo = _posiciones.values.any((p) => t - p.inicio < const Duration(milliseconds: 4500));
     if (moviendo) {
       setState(() {});
+      if (_flotante && _busSeguido != null) _mapa.move(_posicionDe(_busSeguido!), _mapa.camera.zoom);
     } else if (_posiciones.isEmpty) {
       _ticker.stop();
       _ahora = Duration.zero;
@@ -375,12 +430,18 @@ class _MapaScreenState extends State<MapaScreen> with SingleTickerProviderStateM
   Widget build(BuildContext context) {
     final lb = context.lb;
     final alto = MediaQuery.of(context).size.height;
+    // Ventana flotante: solo con una ruta fijada, viendo el mapa y sin ventanas encima
+    VentanaFlotante.permitir(_ruta != null &&
+        Navegacion.pestana.value == Navegacion.mapa &&
+        (ModalRoute.of(context)?.isCurrent ?? true));
     return Scaffold(
       body: SafeArea(
+        top: !_flotante,
         bottom: false,
         child: Column(
           children: [
             Expanded(child: _zonaMapa(context)),
+            if (!_flotante)
             ConstrainedBox(
               constraints: BoxConstraints(maxHeight: alto * (alto < 700 ? 0.6 : 0.5)),
               child: Container(
@@ -491,7 +552,7 @@ class _MapaScreenState extends State<MapaScreen> with SingleTickerProviderStateM
                       ),
                     ),
                 ]),
-                if (_globo != null) MarkerLayer(markers: [_marcadorGlobo(context)]),
+                if (_globo != null && !_flotante) MarkerLayer(markers: [_marcadorGlobo(context)]),
               ],
             ),
           ),
@@ -513,10 +574,10 @@ class _MapaScreenState extends State<MapaScreen> with SingleTickerProviderStateM
         ),
 
         // Tablero de avisos: en el celular va arriba
-        Positioned(top: 0, left: 0, right: 0, child: _TableroAvisos(avisos: _avisos)),
+        if (!_flotante) Positioned(top: 0, left: 0, right: 0, child: _TableroAvisos(avisos: _avisos)),
 
         // Aparece si falla la consulta de los buses
-        if (_sinConexion)
+        if (_sinConexion && !_flotante)
           Positioned(
             top: 60,
             left: 0,

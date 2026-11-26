@@ -10,11 +10,13 @@ import 'services/navegacion.dart';
 import 'services/notificaciones.dart';
 import 'services/server_config.dart';
 import 'services/sesion.dart';
+import 'services/ventana_flotante.dart';
 import 'theme/app_theme.dart';
 import 'widgets/lb.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  VentanaFlotante.iniciar();
   await ServerConfig.cargar();
   await Sesion.i.cargar();
   runApp(const LocalBusApp());
@@ -110,7 +112,11 @@ class _PrincipalState extends State<Principal> {
       },
       child: Scaffold(
         body: IndexedStack(index: actual, children: pantallas),
-        bottomNavigationBar: Container(
+        // En la ventana flotante solo cabe el mapa
+        bottomNavigationBar: ValueListenableBuilder<bool>(
+          valueListenable: VentanaFlotante.activa,
+          builder: (context, flotante, barra) => flotante ? const SizedBox.shrink() : barra!,
+          child: Container(
           decoration: BoxDecoration(border: Border(top: BorderSide(color: lb.linea))),
           child: NavigationBar(
             selectedIndex: actual,
@@ -132,6 +138,7 @@ class _PrincipalState extends State<Principal> {
                     ),
             ],
           ),
+        ),
         ),
       ),
     );
