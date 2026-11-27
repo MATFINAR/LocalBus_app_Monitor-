@@ -30,11 +30,14 @@ class Aro extends StatelessWidget {
 
 /// Cabecera de página (.alertas-cabecera, .ru-cabecera): etiqueta roja, título y subtítulo, con una raya de 2 px.
 class CabeceraPagina extends StatelessWidget {
-  const CabeceraPagina({super.key, required this.etiqueta, required this.titulo, this.subtitulo});
+  const CabeceraPagina({super.key, required this.etiqueta, required this.titulo, this.subtitulo, this.accion});
 
   final String etiqueta;
   final String titulo;
   final String? subtitulo;
+
+  /// Botón arriba a la derecha (la «Guía»).
+  final Widget? accion;
 
   @override
   Widget build(BuildContext context) {
@@ -46,15 +49,22 @@ class CabeceraPagina extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            etiqueta.toUpperCase(),
-            style: AppTheme.titulo(size: 13.6, color: lb.rojoInterfaz, height: 1).copyWith(letterSpacing: 1.6),
-          ),
-          const SizedBox(height: 4),
-          Semantics(
-            header: true,
-            child: Text(titulo, style: AppTheme.titulo(size: 30, color: lb.tinta)),
-          ),
+          Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Expanded(
+              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Text(
+                  etiqueta.toUpperCase(),
+                  style: AppTheme.titulo(size: 13.6, color: lb.rojoInterfaz, height: 1).copyWith(letterSpacing: 1.6),
+                ),
+                const SizedBox(height: 4),
+                Semantics(
+                  header: true,
+                  child: Text(titulo, style: AppTheme.titulo(size: 30, color: lb.tinta)),
+                ),
+              ]),
+            ),
+            if (accion != null) accion!,
+          ]),
           if (subtitulo != null) ...[
             const SizedBox(height: 6),
             Text(subtitulo!, style: TextStyle(fontSize: 15.2, height: 1.45, color: lb.grisTexto)),

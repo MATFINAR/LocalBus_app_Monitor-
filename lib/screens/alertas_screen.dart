@@ -13,6 +13,7 @@ import '../services/ubicacion.dart';
 import '../theme/app_theme.dart';
 import '../widgets/caja_con_franja.dart';
 import '../widgets/common_widgets.dart';
+import '../widgets/guia.dart';
 import '../widgets/lb.dart';
 
 /// Centro de alertas (alertas.html) para invitados y pasajeros: las alertas que las empresas ya revisaron y,
@@ -25,6 +26,8 @@ class AlertasScreen extends StatefulWidget {
 }
 
 class _AlertasScreenState extends State<AlertasScreen> {
+  final _guia = ClavesGuia();
+  final _desplazar = ScrollController();
   List<Alerta> _alertas = [];
   List<Alerta> _misReportes = [];
   List<RutaOpcion> _rutas = [];
@@ -60,6 +63,7 @@ class _AlertasScreenState extends State<AlertasScreen> {
     ServerConfig.cambios.removeListener(_cargar);
     Navegacion.pedidoReportar.removeListener(_alPedirReporte);
     Navegacion.pestana.removeListener(_alCambiarPestana);
+    _desplazar.dispose();
     super.dispose();
   }
 
@@ -140,6 +144,37 @@ class _AlertasScreenState extends State<AlertasScreen> {
 
   int _contar(String tipo) => _alertas.where((a) => a.tipo == tipo).length;
 
+  /// Los pasos de la guía de Alertas de la web, más los de la cuenta cuando hay sesión.
+  List<PasoGuia> _pasosGuia() => [
+        const PasoGuia('Centro de alertas',
+            'Aquí están las novedades de las rutas: demoras, advertencias e información que las empresas ya revisaron.'),
+        PasoGuia('Publicadas y tus reportes',
+            'Publicadas muestra las alertas de todos. En Mis reportes ves en qué va cada alerta que enviaste.',
+            _guia['vistas']),
+        PasoGuia(
+            'Filtrar por tipo',
+            'Cada tipo tiene su color: Demoras en rojo, Advertencias en amarillo e Información en azul. El número dice cuántas hay de cada una.',
+            _guia['tipos']),
+        PasoGuia('Filtrar por ruta',
+            'Deja solo las alertas de una ruta. La lista trae únicamente las rutas que tienen alertas.', _guia['ruta']),
+        PasoGuia(
+            'Historial de resueltas',
+            'Las alertas vigentes salen siempre; aquí eliges de cuántos días atrás quieres ver también las resueltas.',
+            _guia['historial']),
+        PasoGuia(
+            Sesion.i.activa ? 'Seguir rutas y crear alertas' : 'Crear alertas',
+            Sesion.i.activa
+                ? 'En Rutas que sigo eliges de cuáles quieres avisos. Con Crear alerta reportas una novedad: la empresa la revisa antes de publicarla.'
+                : 'Para reportar una novedad en una ruta, inicia sesión con tu cuenta de pasajero.',
+            _guia['acciones']),
+        PasoGuia(
+            'Una alerta',
+            'Cada tarjeta dice el tipo, la fecha, la ruta (con su placa de color), qué pasa y su estado. Tócala para ver todos los detalles.',
+            _guia['tarjeta']),
+        const PasoGuia('Listo',
+            'Las alertas publicadas también salen en la franja de avisos del Mapa. Esta guía sigue en el botón Guía.'),
+      ];
+
   @override
   Widget build(BuildContext context) {
     final con = Sesion.i.activa;
@@ -152,11 +187,22 @@ class _AlertasScreenState extends State<AlertasScreen> {
         child: RefreshIndicator(
           onRefresh: () => _cargar(silencioso: true),
           child: CustomScrollView(
+            controller: _desplazar,
             slivers: [
               SliverPadding(
                 padding: const EdgeInsets.fromLTRB(18, 18, 18, 0),
                 sliver: SliverList.list(children: [
                   CabeceraPagina(
+                    accion: BotonGuia(
+                      id: 'alertas',
+                      titulo: 'Guía de Alertas',
+                      pestana: Navegacion.alertas,
+                      lista: !_cargando && _error == null,
+                      pasos: _pasosGuia,
+                      alEmpezar: () {
+                        if (_desplazar.hasClients) _desplazar.jumpTo(0);
+                      },
+                    ),
                     etiqueta: 'Centro de alertas',
                     titulo: 'Alertas',
                     subtitulo: 'Novedades de las rutas que las empresas ya revisaron.'
@@ -164,6 +210,7 @@ class _AlertasScreenState extends State<AlertasScreen> {
                   ),
                   if (con)
                     LbPestanas<String>(
+                      key: _guia['vistas'],
                       elegida: _vista,
                       onElegir: (v) => setState(() => _vista = v),
                       pestanas: [
@@ -173,6 +220,7 @@ class _AlertasScreenState extends State<AlertasScreen> {
                     ),
                   const SizedBox(height: 4),
                   LbPestanas<String>(
+                    key: _guia['tipos'],
                     elegida: _tipo,
                     onElegir: (v) => setState(() => _tipo = v),
                     pestanas: [
@@ -182,14 +230,14 @@ class _AlertasScreenState extends State<AlertasScreen> {
                       PestanaLb('info', 'Información', cuenta: _contar('info')),
                     ],
                   ),
-                  LbSelect<int>(
+                  _guia.marcar('ruta', LbSelect<int>(
                     etiqueta: 'Ruta',
                     enLinea: true,
                     valor: _rutaFiltro,
                     opciones: [(null, 'Todas las rutas'), for (final r in _rutasFiltro) (r.$1, r.$2)],
                     onChanged: (v) => setState(() => _rutaFiltro = v),
-                  ),
-                  LbSelect<int>(
+                  )),
+                  _guia.marcar('historial', LbSelect<int>(
                     etiqueta: 'Resueltas de',
                     enLinea: true,
                     valor: _dias,
@@ -199,9 +247,10 @@ class _AlertasScreenState extends State<AlertasScreen> {
                       setState(() => _dias = v);
                       _cargar();
                     },
-                  ),
+                  )),
                   const SizedBox(height: 14),
                   Wrap(
+                    key: _guia['acciones'],
                     spacing: 10,
                     runSpacing: 10,
                     children: con
@@ -255,6 +304,7 @@ class _AlertasScreenState extends State<AlertasScreen> {
                     itemCount: filtradas.length,
                     separatorBuilder: (_, _) => const SizedBox(height: 16),
                     itemBuilder: (context, i) => _TarjetaAlerta(
+                      key: i == 0 ? _guia['tarjeta'] : null,
                       alerta: filtradas[i],
                       mio: _vista == 'mios',
                       onTap: () => _verDetalle(filtradas[i], _vista == 'mios'),
@@ -403,7 +453,7 @@ class EstadoAlerta extends StatelessWidget {
 }
 
 class _TarjetaAlerta extends StatelessWidget {
-  const _TarjetaAlerta({required this.alerta, required this.mio, required this.onTap});
+  const _TarjetaAlerta({super.key, required this.alerta, required this.mio, required this.onTap});
 
   final Alerta alerta;
   final bool mio;

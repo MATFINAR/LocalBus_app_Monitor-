@@ -9,6 +9,7 @@ import '../services/api.dart';
 import '../services/navegacion.dart';
 import '../services/server_config.dart';
 import '../theme/app_theme.dart';
+import '../widgets/guia.dart';
 import '../widgets/lb.dart';
 import '../widgets/servidor_dialog.dart';
 
@@ -21,6 +22,8 @@ class AcercaScreen extends StatefulWidget {
 }
 
 class _AcercaScreenState extends State<AcercaScreen> {
+  final _guia = ClavesGuia();
+  final _desplazar = ScrollController();
   Map<String, dynamic>? _cifras;
   String _contacto = '';
 
@@ -36,6 +39,7 @@ class _AcercaScreenState extends State<AcercaScreen> {
   void dispose() {
     ServerConfig.cambios.removeListener(_cargar);
     Navegacion.pestana.removeListener(_alVolver);
+    _desplazar.dispose();
     super.dispose();
   }
 
@@ -58,17 +62,45 @@ class _AcercaScreenState extends State<AcercaScreen> {
 
   String _cifra(String clave) => _cifras == null ? '—' : '${_cifras![clave] ?? 0}';
 
+  /// Los pasos de la guía de «Acerca de» de la web.
+  List<PasoGuia> _pasosGuia() => [
+        const PasoGuia('Acerca de LocalBus', 'Aquí se cuenta qué es LocalBus, para quién es y quién lo hace.'),
+        PasoGuia(
+            'La presentación',
+            'Una presentación animada con la historia de LocalBus. Con los controles de abajo la pausas, saltas a cualquiera de sus ocho escenas o la ves otra vez desde el inicio.',
+            _guia['presentacion']),
+        PasoGuia('LocalBus hoy',
+            'Cifras reales en este momento: empresas, rutas, buses y cuántos buses están en el mapa ahora.',
+            _guia['cifras']),
+        PasoGuia('Para quién es',
+            'Para quienes viajan en bus, para las empresas de transporte y para la movilidad de la ciudad.',
+            _guia['quien']),
+        PasoGuia('Lo que nos importa',
+            'Que lo que ves sea cierto, que sea fácil, que estés al tanto y que tus datos estén cuidados.',
+            _guia['importa']),
+        PasoGuia('Contacto',
+            'Si tienes una empresa de transporte o una sugerencia, aquí está cómo escribirnos.', _guia['contacto']),
+        const PasoGuia('Listo',
+            'Para empezar, abre el Mapa y elige una ruta. Cada pantalla tiene su propia guía en el botón Guía.'),
+      ];
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       body: SafeArea(
         bottom: false,
-        child: ListView(
+        child: Stack(children: [
+        // No es una lista perezosa: la guía necesita que todas las secciones existan para señalarlas
+        SingleChildScrollView(
+          controller: _desplazar,
           padding: const EdgeInsets.only(bottom: 24),
+          child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Semantics(header: true, child: const SizedBox.shrink(), label: 'Acerca de LocalBus'),
-            _Presentacion(cifras: _cifras),
+            _guia.marcar('presentacion', _Presentacion(cifras: _cifras)),
             _Seccion(
+              key: _guia['cifras'],
               titulo: 'LocalBus hoy',
               subtitulo: 'Cifras reales, en este momento.',
               hijo: GridView.count(
@@ -101,6 +133,7 @@ class _AcercaScreenState extends State<AcercaScreen> {
               ),
             ),
             _Seccion(
+              key: _guia['quien'],
               titulo: 'Para quién es',
               hijo: Column(children: const [
                 _Tarjeta('Para quienes viajan en bus',
@@ -113,6 +146,7 @@ class _AcercaScreenState extends State<AcercaScreen> {
               ]),
             ),
             _Seccion(
+              key: _guia['importa'],
               titulo: 'Lo que nos importa',
               hijo: Column(children: [
                 const _Principio('Que lo que ves sea cierto',
@@ -136,6 +170,7 @@ class _AcercaScreenState extends State<AcercaScreen> {
             ),
             // Contacto (.ac-contacto, siempre oscuro)
             Container(
+              key: _guia['contacto'],
               margin: const EdgeInsets.fromLTRB(16, 24, 16, 0),
               padding: const EdgeInsets.fromLTRB(20, 24, 20, 24),
               color: const Color(0xFF080707),
@@ -168,7 +203,22 @@ class _AcercaScreenState extends State<AcercaScreen> {
             const _Pie(),
             const _Servidor(),
           ],
+          ),
         ),
+        Positioned(
+          top: 8,
+          right: 8,
+          child: BotonGuia(
+            id: 'acerca',
+            titulo: 'Guía de Acerca de',
+            pestana: Navegacion.acerca,
+            pasos: _pasosGuia,
+            alEmpezar: () {
+              if (_desplazar.hasClients) _desplazar.jumpTo(0);
+            },
+          ),
+        ),
+        ]),
       ),
     );
   }
@@ -213,7 +263,7 @@ Future<void> abrirWeb(String ruta) async {
 // ================= SECCIONES =================
 
 class _Seccion extends StatelessWidget {
-  const _Seccion({required this.titulo, this.subtitulo, required this.hijo});
+  const _Seccion({super.key, required this.titulo, this.subtitulo, required this.hijo});
   final String titulo;
   final String? subtitulo;
   final Widget hijo;

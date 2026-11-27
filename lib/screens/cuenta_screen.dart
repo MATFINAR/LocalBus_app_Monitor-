@@ -11,6 +11,7 @@ import '../services/navegacion.dart';
 import '../services/sesion.dart';
 import '../theme/app_theme.dart';
 import '../widgets/caja_con_franja.dart';
+import '../widgets/guia.dart';
 import '../widgets/lb.dart';
 import 'acerca_screen.dart';
 import 'perfil_screen.dart';
@@ -75,7 +76,11 @@ class _CuentaTabState extends State<CuentaTab> {
 
 /// Tarjeta de las páginas de acceso (.registro-card): logo sobre negro, título, subtítulo y el formulario.
 class TarjetaAcceso extends StatelessWidget {
-  const TarjetaAcceso({super.key, required this.titulo, required this.subtitulo, required this.hijos, this.atras = false});
+  const TarjetaAcceso(
+      {super.key, required this.titulo, required this.subtitulo, required this.hijos, this.atras = false, this.accion});
+
+  /// Botón arriba a la derecha (la «Guía»).
+  final Widget? accion;
 
   final String titulo;
   final String subtitulo;
@@ -119,6 +124,7 @@ class TarjetaAcceso extends StatelessWidget {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
+                        if (accion != null) Align(alignment: Alignment.centerRight, child: accion),
                         Center(
                           child: Container(
                             height: 110,
@@ -204,6 +210,7 @@ class LoginScreen extends StatefulWidget {
 }
 
 class _LoginScreenState extends State<LoginScreen> {
+  final _guia = ClavesGuia();
   late final TextEditingController _usuario = TextEditingController(text: widget.identificador);
   final TextEditingController _clave = TextEditingController();
   // Como casi todas las apps: la sesión se recuerda salvo que se desmarque
@@ -247,31 +254,49 @@ class _LoginScreenState extends State<LoginScreen> {
     }
   }
 
+  List<PasoGuia> _pasosGuia() => [
+        const PasoGuia('Tu cuenta',
+            'Con una cuenta de pasajero puedes reportar novedades, seguir rutas y recibir solo sus alertas. Sin cuenta puedes ver el mapa, las rutas y las alertas.'),
+        PasoGuia('Usuario o correo', 'Escribe tu nombre de usuario o el correo con el que te registraste.',
+            _guia['usuario']),
+        PasoGuia('Contraseña', 'Con Mostrar puedes revisar lo que escribiste.', _guia['clave']),
+        PasoGuia(
+            'Recordarme y recuperar',
+            'Con Recordarme la sesión sigue abierta al cerrar la app; desmárcalo en un celular prestado. Si olvidaste la contraseña, te enviamos un código al correo.',
+            _guia['recordar']),
+        PasoGuia('Iniciar sesión', 'Al entrar vas al mapa.', _guia['entrar']),
+        PasoGuia('Crear una cuenta', 'Si aún no tienes cuenta, créala aquí. Te pedimos confirmar el correo con un código.',
+            _guia['crear']),
+        const PasoGuia('Listo', 'Esta guía sigue en el botón Guía.'),
+      ];
+
   @override
   Widget build(BuildContext context) {
     final lb = context.lb;
     return TarjetaAcceso(
+      accion: BotonGuia(id: 'ingresar', titulo: 'Guía de Ingresar', pestana: Navegacion.cuenta, pasos: _pasosGuia),
       titulo: 'Inicia sesión',
       subtitulo: 'Entra a tu cuenta de LocalBus.',
       hijos: [
         ErrorAcceso(_error),
-        LbCampo(
+        _guia.marcar('usuario', LbCampo(
           etiqueta: 'Usuario o correo',
           controller: _usuario,
           hint: 'usuario123 o tu@correo.com',
           teclado: TextInputType.emailAddress,
           accion: TextInputAction.next,
           autofill: const [AutofillHints.username, AutofillHints.email],
-        ),
-        LbCampo(
+        )),
+        _guia.marcar('clave', LbCampo(
           etiqueta: 'Contraseña',
           controller: _clave,
           contrasena: true,
           accion: TextInputAction.done,
           autofill: const [AutofillHints.password],
           onSubmitted: (_) => _entrar(),
-        ),
+        )),
         Wrap(
+          key: _guia['recordar'],
           alignment: WrapAlignment.spaceBetween,
           crossAxisAlignment: WrapCrossAlignment.center,
           runSpacing: 4,
@@ -292,8 +317,9 @@ class _LoginScreenState extends State<LoginScreen> {
           ],
         ),
         const SizedBox(height: 14),
-        LbBoton('Iniciar sesión', ancho: true, cargando: _enviando, onPressed: _entrar),
+        _guia.marcar('entrar', LbBoton('Iniciar sesión', ancho: true, cargando: _enviando, onPressed: _entrar)),
         EnlaceAcceso(
+          key: _guia['crear'],
           texto: '¿No tienes una cuenta?',
           enlace: 'Crea una cuenta',
           alTocar: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const RegistroScreen())),

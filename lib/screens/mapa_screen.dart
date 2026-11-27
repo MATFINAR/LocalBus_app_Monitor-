@@ -19,6 +19,7 @@ import '../services/ubicacion.dart';
 import '../services/ventana_flotante.dart';
 import '../theme/app_theme.dart';
 import '../widgets/common_widgets.dart';
+import '../widgets/guia.dart';
 import '../widgets/lb.dart';
 
 /// Mapa en vivo con la lista de rutas: la página de inicio de la web en celular (home.html + home.js).
@@ -73,6 +74,7 @@ class _MapaScreenState extends State<MapaScreen> with SingleTickerProviderStateM
   final Map<int, _BusAnimado> _posiciones = {};
   bool _buscandoBuses = false;
   bool _sinConexion = false;
+  final _guia = ClavesGuia();
   bool _pidiendoBuses = false;
   bool _pidiendoLlegada = false;
   AppLifecycleState _estadoApp = AppLifecycleState.resumed;
@@ -467,6 +469,57 @@ class _MapaScreenState extends State<MapaScreen> with SingleTickerProviderStateM
     return lista;
   }
 
+  // ================= GUÍA =================
+
+  /// Los pasos de la guía del mapa de la web.
+  List<PasoGuia> _pasosGuia() => [
+        const PasoGuia('El mapa en vivo',
+            'Aquí ves las rutas de bus de Medellín y dónde van sus buses en este momento. Te mostramos cada parte de la pantalla. Avanza con Siguiente o sal cuando quieras.'),
+        PasoGuia(
+            'Lista de rutas',
+            'Cada fila es una ruta, con la placa de su color, la empresa que la opera y de dónde sale y a dónde llega. Debajo van la distancia, la duración y cada cuánto pasa un bus. Si la ruta no está operando normal, lo dice con una insignia y el motivo.',
+            _guia['panel']),
+        PasoGuia('Rutas activas',
+            'Cuántas rutas tienen ahora mismo buses enviando su ubicación, de todas las que hay.', _guia['conteo']),
+        PasoGuia(
+            'Mi ubicación',
+            'Pide permiso para usar tu ubicación y la marca en el mapa. Con ella puedes filtrar las rutas que pasan cerca de ti y saber cuánto tarda un bus en llegar adonde estás.',
+            _guia['ubicacion']),
+        PasoGuia(
+            'Reportar una novedad',
+            Sesion.i.activa
+                ? 'Avisa de una demora o un problema en una ruta. Si tienes una ruta elegida, el reporte sale con ella.'
+                : 'Para avisar de una demora o un problema en una ruta, inicia sesión con tu cuenta de pasajero.',
+            _guia['reportar']),
+        PasoGuia('Notificaciones',
+            'Actívalas para que te lleguen las alertas de las rutas aunque no tengas la app abierta.', _guia['avisar']),
+        PasoGuia(
+            'Buscar una ruta',
+            'Escribe el nombre, el código o un lugar de inicio o de llegada. La lista se filtra mientras escribes; la equis borra la búsqueda.',
+            _guia['buscar']),
+        PasoGuia(
+            'Todas o cercanas',
+            'Todas muestra la lista completa. Cercanas a mí deja solo las rutas que pasan a 1 km o menos de tu ubicación y te dice a qué distancia está cada una.',
+            _guia['filtros']),
+        PasoGuia(
+            'Elegir una ruta',
+            'Toca una ruta para dibujar su recorrido en el mapa, con sus buses en vivo y las demoras reportadas. Tócala otra vez para soltarla. Con una ruta elegida, al salir de la app el mapa queda en una ventana flotante.',
+            _guia['ruta']),
+        PasoGuia(
+            'El mapa',
+            'Cada bus sale con una chapa del color de su ruta y se mueve solo. Toca un bus para ver su placa, su velocidad y cuánto tarda en llegar. Solo aparecen los buses que tienen un turno en curso.',
+            _guia['mapa']),
+        PasoGuia(
+            'Avisos',
+            'Las alertas publicadas de las rutas pasan por esta franja: demoras, advertencias e información. Si no hay ninguna, dice que las rutas operan sin novedades.',
+            _guia['avisos']),
+        PasoGuia('Plegar la lista',
+            'Este botón pliega la lista de rutas para que el mapa ocupe más pantalla. Tócalo otra vez para volver a abrirla.',
+            _guia['plegar']),
+        const PasoGuia('Listo',
+            'Ya conoces el mapa. Vuelve a abrir esta guía cuando quieras con el botón Guía. Cada pantalla tiene la suya.'),
+      ];
+
   // ================= PANTALLA =================
 
   @override
@@ -493,7 +546,7 @@ class _MapaScreenState extends State<MapaScreen> with SingleTickerProviderStateM
                   color: lb.blanco,
                   border: Border(top: BorderSide(color: lb.tinta, width: 2)),
                 ),
-                child: _panel(context),
+                child: _guia.marcar('panel', _panel(context)),
               ),
             ),
           ],
@@ -519,6 +572,7 @@ class _MapaScreenState extends State<MapaScreen> with SingleTickerProviderStateM
       children: [
         Positioned.fill(
           child: ColoredBox(
+            key: _guia['mapa'],
             color: lb.mapaFondo,
             child: FlutterMap(
               mapController: _mapa,
@@ -619,7 +673,21 @@ class _MapaScreenState extends State<MapaScreen> with SingleTickerProviderStateM
         ),
 
         // Tablero de avisos: en el celular va arriba
-        if (!_flotante) Positioned(top: 0, left: 0, right: 0, child: _TableroAvisos(avisos: _avisos)),
+        if (!_flotante)
+          Positioned(top: 0, left: 0, right: 0, child: _guia.marcar('avisos', _TableroAvisos(avisos: _avisos))),
+
+        if (!_flotante)
+          Positioned(
+            top: 60,
+            right: 8,
+            child: BotonGuia(
+              id: 'mapa',
+              titulo: 'Guía del mapa',
+              pestana: Navegacion.mapa,
+              lista: !_cargando && _errorCarga == null,
+              pasos: _pasosGuia,
+            ),
+          ),
 
         // Aparece si falla la consulta de los buses
         if (_sinConexion && !_flotante)
@@ -781,11 +849,13 @@ class _MapaScreenState extends State<MapaScreen> with SingleTickerProviderStateM
               const SizedBox(width: 12),
               Expanded(
                 child: Text(
+                  key: _guia['conteo'],
                   _cargando ? '' : '$_totalActivas activa${_totalActivas == 1 ? '' : 's'} de $total',
                   style: TextStyle(fontSize: 14.4, color: lb.grisTexto),
                 ),
               ),
               SizedBox(
+                key: _guia['plegar'],
                 width: 36,
                 height: 36,
                 child: OutlinedButton(
@@ -805,15 +875,20 @@ class _MapaScreenState extends State<MapaScreen> with SingleTickerProviderStateM
           padding: const EdgeInsets.fromLTRB(20, 8, 20, 12),
           child: Row(
             children: [
-              Expanded(child: LbAccion(_ubicando ? 'Buscando…' : 'Mi ubicación', esperando: _ubicando, onPressed: _miUbicacion)),
+              Expanded(
+                key: _guia['ubicacion'],
+                child: LbAccion(_ubicando ? 'Buscando…' : 'Mi ubicación', esperando: _ubicando, onPressed: _miUbicacion),
+              ),
               const SizedBox(width: 8),
               Expanded(
+                key: _guia['reportar'],
                 child: Sesion.i.activa
                     ? LbAccion('Reportar', onPressed: () => Navegacion.reportar(_seleccionada))
                     : LbAccion('Inicia sesión para reportar', onPressed: () => Navegacion.ir(Navegacion.cuenta)),
               ),
               const SizedBox(width: 8),
               Expanded(
+                key: _guia['avisar'],
                 child: ValueListenableBuilder<String>(
                   valueListenable: Notificaciones.i.permiso,
                   builder: (context, permiso, _) => LbAccion(
@@ -868,6 +943,7 @@ class _MapaScreenState extends State<MapaScreen> with SingleTickerProviderStateM
       mainAxisSize: MainAxisSize.min,
       children: [
         Padding(
+          key: _guia['buscar'],
           padding: const EdgeInsets.symmetric(horizontal: 20),
           child: TextField(
             controller: _buscar,
@@ -891,6 +967,7 @@ class _MapaScreenState extends State<MapaScreen> with SingleTickerProviderStateM
           ),
         ),
         Padding(
+          key: _guia['filtros'],
           padding: const EdgeInsets.fromLTRB(20, 6, 20, 0),
           child: LbPestanas<String>(
             separacion: 20,
@@ -939,7 +1016,8 @@ class _MapaScreenState extends State<MapaScreen> with SingleTickerProviderStateM
         if (lista is ListView)
           SliverPadding(
             padding: EdgeInsets.only(bottom: MediaQuery.of(context).padding.bottom + 8),
-            sliver: SliverList.builder(itemCount: visibles.length, itemBuilder: (c, i) => _tarjeta(visibles[i])),
+            sliver: SliverList.builder(
+                itemCount: visibles.length, itemBuilder: (c, i) => _tarjeta(visibles[i], primera: i == 0)),
           )
         else
           SliverToBoxAdapter(child: lista),
@@ -947,7 +1025,9 @@ class _MapaScreenState extends State<MapaScreen> with SingleTickerProviderStateM
     );
   }
 
-  Widget _tarjeta(Ruta r) => _TarjetaRuta(
+  /// La primera tarjeta es la que señala la guía.
+  Widget _tarjeta(Ruta r, {bool primera = false}) => _TarjetaRuta(
+        key: primera ? _guia['ruta'] : null,
         ruta: r,
         elegida: r.id == _seleccionada,
         distancia: _filtro == 'cercanas' ? (_distancias?[r.id]) : null,
@@ -982,7 +1062,7 @@ class _MapaScreenState extends State<MapaScreen> with SingleTickerProviderStateM
       padding: EdgeInsets.only(bottom: MediaQuery.of(context).padding.bottom + 8),
       shrinkWrap: true,
       itemCount: visibles.length,
-      itemBuilder: (context, i) => _tarjeta(visibles[i]),
+      itemBuilder: (context, i) => _tarjeta(visibles[i], primera: i == 0),
     );
   }
 }
@@ -1067,7 +1147,7 @@ class _SinResultados extends StatelessWidget {
 
 /// Tarjeta de una ruta en la lista (.route-card).
 class _TarjetaRuta extends StatelessWidget {
-  const _TarjetaRuta({required this.ruta, required this.elegida, required this.onTap, required this.linea, this.distancia});
+  const _TarjetaRuta({super.key, required this.ruta, required this.elegida, required this.onTap, required this.linea, this.distancia});
 
   final Ruta ruta;
   final bool elegida;

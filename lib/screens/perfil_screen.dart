@@ -7,6 +7,7 @@ import '../services/mensajes.dart';
 import '../services/navegacion.dart';
 import '../services/sesion.dart';
 import '../theme/app_theme.dart';
+import '../widgets/guia.dart';
 import '../widgets/lb.dart';
 import 'cuenta_screen.dart';
 
@@ -37,6 +38,30 @@ const _colores = [
 ];
 
 class _PerfilScreenState extends State<PerfilScreen> {
+  final _guia = ClavesGuia();
+  final _desplazar = ScrollController();
+
+  @override
+  void dispose() {
+    _desplazar.dispose();
+    super.dispose();
+  }
+
+  List<PasoGuia> _pasosGuia() => [
+        const PasoGuia('Mi perfil', 'Aquí están los datos de tu cuenta y sus ajustes.'),
+        PasoGuia('Tus datos', 'Tu avatar, tu nombre y tu correo.', _guia['avatar']),
+        PasoGuia('Ajustes', 'Elige el tema de la app: igual que el celular, claro u oscuro. Se guarda al tocarlo.',
+            _guia['ajustes']),
+        PasoGuia(
+            'Editar y cambiar contraseña',
+            'Cambia tu nombre, correo, usuario, teléfono y color del avatar, o pon una contraseña nueva.',
+            _guia['editar']),
+        PasoGuia('Cerrar sesión', 'Sales de tu cuenta en este celular.', _guia['salir']),
+        PasoGuia('Eliminar cuenta',
+            'Borra para siempre tu perfil, tus ajustes y las alertas que hayas reportado. Antes te pide confirmar.',
+            _guia['eliminar']),
+        const PasoGuia('Listo', 'Esta guía sigue en el botón Guía.'),
+      ];
   _Modo _modo = _Modo.ver;
   String? _estadoTema;
   bool _guardandoTema = false;
@@ -74,11 +99,27 @@ class _PerfilScreenState extends State<PerfilScreen> {
       body: SafeArea(
         bottom: false,
         child: ListView(
+          controller: _desplazar,
           padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
           children: [
-            const CabeceraPagina(etiqueta: 'Tu cuenta', titulo: 'Mi perfil'),
+            CabeceraPagina(
+              etiqueta: 'Tu cuenta',
+              titulo: 'Mi perfil',
+              accion: BotonGuia(
+                id: 'perfil',
+                titulo: 'Guía de Mi perfil',
+                pestana: Navegacion.cuenta,
+                pasos: _pasosGuia,
+                // La guía recorre la vista principal, desde arriba
+                alEmpezar: () {
+                  setState(() => _modo = _Modo.ver);
+                  if (_desplazar.hasClients) _desplazar.jumpTo(0);
+                },
+              ),
+            ),
             // Avatar grande
             Padding(
+              key: _guia['avatar'],
               padding: const EdgeInsets.symmetric(vertical: 22),
               child: Column(children: [
                 AvatarIniciales(iniciales: u.iniciales, color: u.color, size: 92),
@@ -118,6 +159,7 @@ class _PerfilScreenState extends State<PerfilScreen> {
 
         // Ajustes: se guardan al elegir, sin botón de guardar
         Container(
+          key: _guia['ajustes'],
           margin: const EdgeInsets.only(top: 24),
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(color: lb.concreto, borderRadius: BorderRadius.circular(AppTheme.radio)),
@@ -154,13 +196,13 @@ class _PerfilScreenState extends State<PerfilScreen> {
           ),
         ),
         const SizedBox(height: 22),
-        LbAcciones(botones: [
+        _guia.marcar('editar', LbAcciones(botones: [
           LbBoton('Editar perfil', onPressed: () => setState(() => _modo = _Modo.editar)),
           LbBoton('Cambiar contraseña',
               estilo: EstiloBoton.secundario, onPressed: () => setState(() => _modo = _Modo.contrasena)),
-        ]),
+        ])),
         const SizedBox(height: 10),
-        LbBoton('Cerrar sesión',
+        LbBoton(key: _guia['salir'], 'Cerrar sesión',
             estilo: EstiloBoton.secundario,
             ancho: true,
             onPressed: () async {
@@ -169,6 +211,7 @@ class _PerfilScreenState extends State<PerfilScreen> {
               Navegacion.ir(Navegacion.mapa);
             }),
         Container(
+          key: _guia['eliminar'],
           margin: const EdgeInsets.only(top: 26),
           padding: const EdgeInsets.only(top: 16),
           decoration: BoxDecoration(border: Border(top: BorderSide(color: lb.linea))),

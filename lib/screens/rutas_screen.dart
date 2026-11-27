@@ -7,12 +7,14 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/ruta.dart';
 import '../services/api.dart';
+import '../services/navegacion.dart';
 import '../services/server_config.dart';
 import '../services/texto.dart';
 import '../services/ubicacion.dart';
 import '../theme/app_theme.dart';
 import '../widgets/caja_con_franja.dart';
 import '../widgets/common_widgets.dart';
+import '../widgets/guia.dart';
 import '../widgets/lb.dart';
 
 /// Rutas (rutas.html) como las ve un pasajero: filtros por estado, búsqueda y tres formas de verlas.
@@ -31,6 +33,8 @@ const _estados = [
 ];
 
 class _RutasScreenState extends State<RutasScreen> {
+  final _guia = ClavesGuia();
+  final _desplazar = ScrollController();
   final TextEditingController _buscar = TextEditingController();
   final MapController _mapa = MapController();
   List<Ruta> _rutas = [];
@@ -56,6 +60,7 @@ class _RutasScreenState extends State<RutasScreen> {
   void dispose() {
     ServerConfig.cambios.removeListener(_cargar);
     _buscar.dispose();
+    _desplazar.dispose();
     super.dispose();
   }
 
@@ -109,13 +114,46 @@ class _RutasScreenState extends State<RutasScreen> {
     } catch (_) {}
   }
 
+  /// Los pasos de la guía de Rutas de la web.
+  List<PasoGuia> _pasosGuia() => [
+        const PasoGuia('Rutas',
+            'Aquí están todas las rutas de las empresas de transporte, con su recorrido, sus datos y si están operando ahora.'),
+        PasoGuia(
+            'Filtrar por estado',
+            'Cada pestaña dice cuántas rutas hay en ese estado. Activas: tienen buses en turno enviando su ubicación. Sin buses activos: hay turnos, pero ningún bus está en el recorrido. Fuera de horario: ningún turno en curso. Fuera de servicio: suspendida por la empresa, con un motivo.',
+            _guia['estados']),
+        PasoGuia('Buscar',
+            'Busca por código, nombre, origen o destino. No importan las tildes ni las mayúsculas.', _guia['buscar']),
+        PasoGuia(
+            'Ver como',
+            'La misma información en tres formas: Tabla, Fichas (tarjetas) o Mapa, con todas las rutas dibujadas con su color. La app recuerda la que elegiste.',
+            _guia['vistas']),
+        PasoGuia(
+            'La ruta',
+            'La placa con su color, el nombre y el recorrido. Debajo: distancia, duración, cada cuánto pasa un bus, paradas y la empresa que la opera. Si no está activa, lleva su estado y el motivo.',
+            _guia['ficha']),
+        PasoGuia('El mapa de rutas', 'Toca una línea para ver los datos de esa ruta.', _guia['mapa']),
+        const PasoGuia('Listo',
+            'Para ver una ruta con sus buses en vivo, elígela en el Mapa. Esta guía sigue en el botón Guía.'),
+      ];
+
   @override
   Widget build(BuildContext context) {
     final visibles = _visibles;
     final mapa = _vista == 'mapa';
 
     final cabecera = <Widget>[
-      const CabeceraPagina(
+      CabeceraPagina(
+        accion: BotonGuia(
+          id: 'rutas',
+          titulo: 'Guía de Rutas',
+          pestana: Navegacion.rutas,
+          lista: !_cargando && _error == null,
+          pasos: _pasosGuia,
+          alEmpezar: () {
+            if (_desplazar.hasClients) _desplazar.jumpTo(0);
+          },
+        ),
         etiqueta: 'Red de transporte',
         titulo: 'Rutas',
         subtitulo: 'Recorridos de las empresas de transporte de Medellín. Elige una en el mapa para ver sus buses en vivo.',
@@ -123,6 +161,7 @@ class _RutasScreenState extends State<RutasScreen> {
       if (_rutas.isNotEmpty) ...[
         const SizedBox(height: 10),
         TextField(
+          key: _guia['buscar'],
           controller: _buscar,
           onChanged: (v) {
             setState(() {
@@ -149,6 +188,7 @@ class _RutasScreenState extends State<RutasScreen> {
         ),
         const SizedBox(height: 4),
         LbPestanas<String>(
+          key: _guia['estados'],
           elegida: _filtro,
           onElegir: (v) {
             setState(() {
@@ -163,7 +203,7 @@ class _RutasScreenState extends State<RutasScreen> {
               PestanaLb(estado, nombre, cuenta: _rutas.where((r) => r.estado == estado).length),
           ],
         ),
-        _VerComo(vista: _vista, onElegir: _cambiarVista),
+        _guia.marcar('vistas', _VerComo(vista: _vista, onElegir: _cambiarVista)),
         if (visibles.isEmpty)
           const Padding(
             padding: EdgeInsets.only(top: 14),
@@ -190,13 +230,13 @@ class _RutasScreenState extends State<RutasScreen> {
     } else if (_rutas.isEmpty) {
       cuerpo = SliverToBoxAdapter(child: _vacio(context));
     } else if (mapa) {
-      cuerpo = SliverToBoxAdapter(child: _vistaMapa(context, visibles));
+      cuerpo = SliverToBoxAdapter(child: _guia.marcar('mapa', _vistaMapa(context, visibles)));
     } else {
       cuerpo = SliverList.builder(
         itemCount: visibles.length,
         itemBuilder: (context, i) => Padding(
           padding: EdgeInsets.only(bottom: _vista == 'fichas' ? 14 : 0),
-          child: FichaRuta(ruta: visibles[i], tarjeta: _vista == 'fichas'),
+          child: FichaRuta(key: i == 0 ? _guia['ficha'] : null, ruta: visibles[i], tarjeta: _vista == 'fichas'),
         ),
       );
     }
@@ -207,6 +247,7 @@ class _RutasScreenState extends State<RutasScreen> {
         child: RefreshIndicator(
           onRefresh: _cargar,
           child: CustomScrollView(
+            controller: _desplazar,
             slivers: [
               SliverPadding(
                 padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
