@@ -107,6 +107,55 @@ class RutaOpcion {
   String get etiqueta => '$codigo · $nombre';
 }
 
+/// Punto donde se reportó una demora publicada, con las rutas a las que puede estar afectando (la de la alerta y
+/// las que pasan a 500 m). El punto de un pasajero llega redondeado a unos 110 m.
+class DemoraMapa {
+  final int alerta;
+  final double lat;
+  final double lng;
+  final String descripcion;
+
+  /// Ruta en la que se reportó.
+  final String ruta;
+  final String rutaCodigo;
+  final String hace;
+
+  /// Rutas a las que puede estar afectando.
+  final List<int> rutas;
+
+  /// Rutas de la propia alerta (no solo cercanas).
+  final List<int> directas;
+
+  const DemoraMapa({
+    required this.alerta,
+    required this.lat,
+    required this.lng,
+    required this.descripcion,
+    required this.ruta,
+    required this.rutaCodigo,
+    required this.hace,
+    required this.rutas,
+    required this.directas,
+  });
+
+  factory DemoraMapa.fromJson(Map<String, dynamic> j) => DemoraMapa(
+        alerta: _int(j['alerta']),
+        lat: _num(j['lat']),
+        lng: _num(j['lng']),
+        descripcion: '${j['descripcion'] ?? ''}',
+        ruta: '${j['ruta'] ?? ''}',
+        rutaCodigo: '${j['ruta_codigo'] ?? ''}',
+        hace: '${j['hace'] ?? ''}',
+        rutas: [for (final r in j['rutas'] as List? ?? const []) _int(r)],
+        directas: [for (final r in j['directas'] as List? ?? const []) _int(r)],
+      );
+
+  bool afecta(int rutaId) => rutas.contains(rutaId);
+
+  /// Se reportó en esa ruta (y no solo cerca de ella).
+  bool enRuta(int rutaId) => directas.contains(rutaId);
+}
+
 /// Aviso del tablero del mapa (alerta publicada y vigente).
 class AvisoMapa {
   final int id;

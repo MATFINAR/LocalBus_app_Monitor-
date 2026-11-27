@@ -49,6 +49,9 @@ class _MapaScreenState extends State<MapaScreen> with SingleTickerProviderStateM
   // Datos
   List<Ruta> _rutas = [];
   List<AvisoMapa> _avisos = [];
+
+  /// Dónde se reportaron demoras y qué rutas pueden estar afectando: se pintan al elegir una ruta.
+  List<DemoraMapa> _demoras = [];
   int _totalActivas = 0;
   bool _cargando = true;
   String? _errorCarga;
@@ -209,6 +212,8 @@ class _MapaScreenState extends State<MapaScreen> with SingleTickerProviderStateM
       setState(() {
         _rutas = (d['rutas'] as List? ?? []).map((r) => Ruta.fromJson(r as Map<String, dynamic>)).toList();
         _avisos = (d['avisos'] as List? ?? []).map((a) => AvisoMapa.fromJson(a as Map<String, dynamic>)).toList();
+        _demoras = (d['demoras'] as List? ?? []).map((a) => DemoraMapa.fromJson(a as Map<String, dynamic>)).toList();
+        if (_globo?.tipo == 'demora') _globo = null;
         _totalActivas = (d['total_activas'] as num?)?.toInt() ?? 0;
         _cargando = false;
         _errorCarga = null;
@@ -224,6 +229,10 @@ class _MapaScreenState extends State<MapaScreen> with SingleTickerProviderStateM
   }
 
   Ruta? get _ruta => _seleccionada == null ? null : _rutas.where((r) => r.id == _seleccionada).firstOrNull;
+
+  /// Demoras que pueden estar afectando la ruta elegida (reportadas en ella o a 500 m de su trazado).
+  List<DemoraMapa> get _demorasDeRuta =>
+      _seleccionada == null ? const [] : [for (final d in _demoras) if (d.afecta(_seleccionada!)) d];
 
   // ================= RUTA ELEGIDA =================
 
@@ -257,7 +266,10 @@ class _MapaScreenState extends State<MapaScreen> with SingleTickerProviderStateM
     if (_buscandoBuses) return '$nombre: buscando buses…';
     final n = _posiciones.length;
     final sinTrazado = ruta.coordenadas.isEmpty ? 'sin recorrido trazado. ' : '';
-    return '$nombre: $sinTrazado${n == 0 ? 'sin buses en vivo' : n == 1 ? '1 bus en vivo' : '$n buses en vivo'}';
+    final demoras = {for (final d in _demorasDeRuta) d.alerta}.length;
+    final textoDemoras = demoras == 0 ? '' : demoras == 1 ? ' · 1 demora reportada' : ' · $demoras demoras reportadas';
+    return '$nombre: $sinTrazado${n == 0 ? 'sin buses en vivo' : n == 1 ? '1 bus en vivo' : '$n buses en vivo'}'
+        '$textoDemoras';
   }
 
   // ================= BUSES EN VIVO =================
@@ -559,6 +571,7 @@ class _MapaScreenState extends State<MapaScreen> with SingleTickerProviderStateM
                     ),
                   ]),
                 if (ruta != null) MarkerLayer(markers: _marcadoresRuta(ruta)),
+                if (ruta != null) MarkerLayer(markers: _marcadoresDemoras(ruta)),
                 if (_yo != null)
                   MarkerLayer(markers: [
                     Marker(
@@ -658,6 +671,26 @@ class _MapaScreenState extends State<MapaScreen> with SingleTickerProviderStateM
     ];
   }
 
+  /// Demoras que pueden estar afectando la ruta: al tocarlas se abre su globo. En el globo, busId es la
+  /// posición de la demora en _demoras.
+  List<Marker> _marcadoresDemoras(Ruta ruta) => [
+        for (final d in _demorasDeRuta)
+          Marker(
+            point: LatLng(d.lat, d.lng),
+            width: 36,
+            height: 36,
+            child: Semantics(
+              button: true,
+              label: 'Demora: ${d.descripcion}',
+              child: GestureDetector(
+                onTap: () => setState(
+                    () => _globo = (punto: LatLng(d.lat, d.lng), tipo: 'demora', busId: _demoras.indexOf(d))),
+                child: Center(child: _PuntoDemora(cercana: !d.enRuta(ruta.id))),
+              ),
+            ),
+          ),
+      ];
+
   Marker _marcadorGlobo(BuildContext context) {
     final g = _globo!;
     final ruta = _ruta;
@@ -691,6 +724,20 @@ class _MapaScreenState extends State<MapaScreen> with SingleTickerProviderStateM
       case 'parada':
         contenido = const _GloboTexto(titulo: '', texto: 'Parada', pequeno: true);
         alto = 90;
+      case 'demora':
+        final indice = g.busId ?? -1;
+        final d = indice >= 0 && indice < _demoras.length ? _demoras[indice] : null;
+        final enRuta = d != null && ruta != null && d.enRuta(ruta.id);
+        contenido = _GloboTexto(
+          titulo: 'Demora${d != null && d.hace.isNotEmpty ? ' · hace ${d.hace}' : ''}',
+          texto: d?.descripcion ?? '',
+          nota: d == null
+              ? null
+              : enRuta
+                  ? 'Reportada en esta ruta'
+                  : 'Reportada en ${d.rutaCodigo} · ${d.ruta}, a 500 m o menos de esta ruta',
+        );
+        alto = 230;
       default:
         contenido = const _GloboTexto(titulo: 'Tu ubicación', texto: '');
         alto = 90;
@@ -1209,6 +1256,30 @@ class _PuntoRuta extends StatelessWidget {
   }
 }
 
+/// Demora reportada que puede afectar la ruta elegida (.punto-demora): círculo rojo con un reloj. Si se reportó en
+/// otra ruta que pasa a 500 m, va en blanco con el reloj rojo (afecta, pero no es de esta ruta). Los colores son
+/// fijos: van sobre el mapa, en tema claro u oscuro.
+class _PuntoDemora extends StatelessWidget {
+  const _PuntoDemora({required this.cercana});
+  final bool cercana;
+
+  @override
+  Widget build(BuildContext context) {
+    final rojo = context.lb.rojo;
+    return Container(
+      width: 28,
+      height: 28,
+      decoration: BoxDecoration(
+        color: cercana ? Colors.white : rojo,
+        shape: BoxShape.circle,
+        border: Border.all(color: cercana ? rojo : Colors.white, width: 2),
+        boxShadow: const [BoxShadow(color: Color(0x73000000), blurRadius: 4, offset: Offset(0, 1))],
+      ),
+      child: Icon(Icons.schedule, size: 17, color: cercana ? rojo : Colors.white),
+    );
+  }
+}
+
 /// Tu ubicación: punto azul con una onda lenta y tenue (.punto-ubicacion).
 class _PuntoUbicacion extends StatefulWidget {
   const _PuntoUbicacion();
@@ -1277,10 +1348,13 @@ class _PuntoUbicacionState extends State<_PuntoUbicacion> with SingleTickerProvi
 
 /// Ventanita sobre el mapa (popup de Leaflet) para el origen, el destino, una parada o tu ubicación.
 class _GloboTexto extends StatelessWidget {
-  const _GloboTexto({required this.titulo, required this.texto, this.pequeno = false});
+  const _GloboTexto({required this.titulo, required this.texto, this.pequeno = false, this.nota});
   final String titulo;
   final String texto;
   final bool pequeno;
+
+  /// Línea pequeña en gris debajo del texto.
+  final String? nota;
 
   @override
   Widget build(BuildContext context) {
@@ -1298,6 +1372,13 @@ class _GloboTexto extends StatelessWidget {
                   maxLines: 3,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(fontSize: pequeno ? 12.5 : 14, color: lb.tinta, height: 1.35)),
+            if (nota != null) ...[
+              const SizedBox(height: 4),
+              Text(nota!,
+                  maxLines: 3,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(fontSize: 12.5, color: lb.grisTexto, height: 1.3)),
+            ],
           ],
         ),
       ),
