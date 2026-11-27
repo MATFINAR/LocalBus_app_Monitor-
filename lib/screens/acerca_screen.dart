@@ -118,7 +118,7 @@ class _AcercaScreenState extends State<AcercaScreen> {
                 const _Principio('Que lo que ves sea cierto',
                     'Solo mostramos los buses que están recorriendo su ruta en este momento. Si un bus deja de reportar dónde está, lo quitamos del mapa para no confundirte.'),
                 const _Principio('Que sea fácil',
-                    'Funciona desde el navegador de tu celular o tu computador, sin instalar nada y sin pasos complicados.'),
+                    'Abres la app y ves tu ruta, sin pasos complicados. También puedes usar LocalBus desde el navegador.'),
                 const _Principio('Que estés al tanto',
                     'Cuando una ruta tiene un problema, como obras, un cierre o una demora, te avisamos para que puedas organizarte.'),
                 _Principio('Que tus datos estén cuidados', 'Usamos tu información solo para que el servicio funcione. Lo explicamos en la ',
@@ -420,10 +420,6 @@ class _Pie extends StatelessWidget {
           enlace('Términos y condiciones', () => abrirWeb('/terminos/')),
           enlace('Política de privacidad', () => abrirWeb('/privacidad/')),
           titulo('Contacto'),
-          Row(children: [
-            Text('Teléfono  ', style: TextStyle(color: lb.grisTexto, fontSize: 13)),
-            enlace('+57 (1) 234 5678', () => launchUrl(Uri(scheme: 'tel', path: '+571234567890'))),
-          ]),
           Row(children: [
             Text('Correo  ', style: TextStyle(color: lb.grisTexto, fontSize: 13)),
             Flexible(

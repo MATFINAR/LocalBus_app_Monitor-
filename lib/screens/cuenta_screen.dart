@@ -206,7 +206,8 @@ class LoginScreen extends StatefulWidget {
 class _LoginScreenState extends State<LoginScreen> {
   late final TextEditingController _usuario = TextEditingController(text: widget.identificador);
   final TextEditingController _clave = TextEditingController();
-  bool _recordar = false;
+  // Como casi todas las apps: la sesión se recuerda salvo que se desmarque
+  bool _recordar = true;
   bool _enviando = false;
   String? _error;
 
@@ -385,9 +386,17 @@ class VerificadorDisponible {
 }
 
 /// Correo con forma válida (la misma expresión que registro.js).
-final RegExp _formatoCorreo = RegExp(r'^[^\s@]+@[^\s@]+\.[^\s@]+$');
+final RegExp formatoCorreo = RegExp(r'^[^\s@]+@[^\s@]+\.[^\s@]+$');
 
-const String _correoInvalido = 'Escribe un correo válido, por ejemplo tu@correo.com';
+const String textoCorreoInvalido = 'Escribe un correo válido, por ejemplo tu@correo.com';
+
+/// Nombre de usuario con forma válida y su aviso (registro y perfil).
+final RegExp formatoUsuario = RegExp(r'^[a-zA-Z0-9._]{3,30}$');
+const String textoUsuarioInvalido = 'Usa entre 3 y 30 caracteres: letras, números, puntos o guiones bajos.';
+
+/// Teléfono con forma válida y su aviso (registro y perfil).
+final RegExp formatoTelefono = RegExp(r'^\d{7,15}$');
+const String textoTelefonoInvalido = 'Escribe al menos 7 dígitos.';
 
 /// Barra de fuerza de la contraseña (registro.js): 4 niveles.
 class FuerzaContrasena extends StatelessWidget {
@@ -447,7 +456,6 @@ class _RegistroScreenState extends State<RegistroScreen> {
   late final _vUsuario = VerificadorDisponible('nickname', _refrescar);
   late final _vTelefono = VerificadorDisponible('telefono', _refrescar);
   bool _terminos = false;
-  bool _novedades = false;
   bool _enviando = false;
   String? _error;
   String? _errorClave;
@@ -515,7 +523,7 @@ class _RegistroScreenState extends State<RegistroScreen> {
     if ([_nombre, _apellido, _email, _usuario, _clave].any((c) => c.text.trim().isEmpty)) {
       return 'Completa todos los campos obligatorios.';
     }
-    if (!_formatoCorreo.hasMatch(email)) return '$_correoInvalido.';
+    if (!formatoCorreo.hasMatch(email)) return '$textoCorreoInvalido.';
     if (_vEmail.estado == EstadoCampo.mal) return 'Ese correo ya tiene una cuenta. Inicia sesión o usa otro.';
     if (!RegExp(r'^[a-zA-Z0-9._]{3,30}$').hasMatch(usuario) || _vUsuario.estado == EstadoCampo.mal) {
       return 'Corrige el nombre de usuario: está en uso o tiene caracteres no permitidos.';
@@ -650,7 +658,7 @@ class _RegistroScreenState extends State<RegistroScreen> {
           ayuda: 'Usaremos este correo para enviarte alertas.',
           onChanged: (v) {
             final t = v.trim().toLowerCase();
-            _vEmail.revisar(t, formatoMalo: _formatoCorreo.hasMatch(t) ? null : _correoInvalido);
+            _vEmail.revisar(t, formatoMalo: formatoCorreo.hasMatch(t) ? null : textoCorreoInvalido);
             _alCambiarDato();
           },
         ),
@@ -666,9 +674,7 @@ class _RegistroScreenState extends State<RegistroScreen> {
           onChanged: (v) {
             final t = v.trim();
             _vUsuario.revisar(t,
-                formatoMalo: RegExp(r'^[a-zA-Z0-9._]{3,30}$').hasMatch(t)
-                    ? null
-                    : 'Usa entre 3 y 30 caracteres: letras, números, puntos o guiones bajos.');
+                formatoMalo: formatoUsuario.hasMatch(t) ? null : textoUsuarioInvalido);
             _alCambiarDato();
           },
           extra: _Sugerencias(
@@ -717,7 +723,7 @@ class _RegistroScreenState extends State<RegistroScreen> {
           mensaje: _vTelefono.mensaje,
           ayuda: 'Solo números, entre 7 y 15 dígitos.',
           onChanged: (v) => _vTelefono.revisar(v,
-              formatoMalo: v.isEmpty || RegExp(r'^\d{7,15}$').hasMatch(v) ? null : 'Escribe al menos 7 dígitos.'),
+              formatoMalo: v.isEmpty || formatoTelefono.hasMatch(v) ? null : textoTelefonoInvalido),
         ),
         _Casilla(
           valor: _terminos,
@@ -734,11 +740,6 @@ class _RegistroScreenState extends State<RegistroScreen> {
                 style: enlace,
                 recognizer: TapGestureRecognizer()..onTap = () => abrirWeb('/privacidad/')),
           ])),
-        ),
-        _Casilla(
-          valor: _novedades,
-          alCambiar: (v) => setState(() => _novedades = v),
-          texto: const Text('Quiero recibir alertas y novedades por correo'),
         ),
         const SizedBox(height: 18),
         LbBoton('Crear cuenta', ancho: true, cargando: _enviando, onPressed: _enviar),
@@ -920,10 +921,10 @@ class _RecuperarScreenState extends State<RecuperarScreen> {
       setState(() => _error = 'Escribe tu correo.');
       return;
     }
-    if (!_formatoCorreo.hasMatch(email)) {
+    if (!formatoCorreo.hasMatch(email)) {
       setState(() {
-        _errorEmail = _correoInvalido;
-        _error = '$_correoInvalido.';
+        _errorEmail = textoCorreoInvalido;
+        _error = '$textoCorreoInvalido.';
       });
       return;
     }
@@ -980,7 +981,7 @@ class _RecuperarScreenState extends State<RecuperarScreen> {
           ayuda: 'Te enviaremos un código de 6 dígitos a este correo.',
           onChanged: (v) {
             final t = v.trim();
-            final nuevo = t.isEmpty || _formatoCorreo.hasMatch(t) ? null : _correoInvalido;
+            final nuevo = t.isEmpty || formatoCorreo.hasMatch(t) ? null : textoCorreoInvalido;
             if (nuevo != _errorEmail || _error != null) {
               setState(() {
                 _errorEmail = nuevo;

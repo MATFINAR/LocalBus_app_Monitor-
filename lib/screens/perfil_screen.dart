@@ -230,6 +230,10 @@ class _EditarPerfilState extends State<_EditarPerfil> {
       setState(() => _error = 'Corrige el nombre de usuario antes de guardar.');
       return;
     }
+    if (_vTelefono.estado == EstadoCampo.mal) {
+      setState(() => _error = 'Corrige el teléfono antes de guardar.');
+      return;
+    }
     setState(() {
       _enviando = true;
       _error = null;
@@ -323,22 +327,20 @@ class _EditarPerfilState extends State<_EditarPerfil> {
           onChanged: (v) {
             final t = v.trim().toLowerCase();
             if (t == widget.usuario.email) return _vEmail.revisar('');
-            _vEmail.revisar(t,
-                formatoMalo: RegExp(r'^[^\s@]+@[^\s@]+\.[^\s@]+$').hasMatch(t) ? null : '⚠️ Ingresa un correo válido');
+            _vEmail.revisar(t, formatoMalo: formatoCorreo.hasMatch(t) ? null : textoCorreoInvalido);
           },
         ),
         LbCampo(
           etiqueta: 'Nombre de usuario',
           controller: _nick,
-          maxLength: 100,
+          maxLength: 30,
           estado: _vNick.estado,
           mensaje: _vNick.mensaje,
           onChanged: (v) {
             final t = v.trim();
-            _vNick.revisar(t,
-                formatoMalo: RegExp(r'^[a-zA-Z0-9._]{3,30}$').hasMatch(t)
-                    ? null
-                    : '⚠️ Solo letras, números, puntos y guiones (3-30 caracteres)');
+            // El tuyo de ahora no está «en uso» (igual que con el correo y el teléfono)
+            if (t == widget.usuario.nickName) return _vNick.revisar('');
+            _vNick.revisar(t, formatoMalo: formatoUsuario.hasMatch(t) ? null : textoUsuarioInvalido);
           },
         ),
         LbCampo(
@@ -351,7 +353,7 @@ class _EditarPerfilState extends State<_EditarPerfil> {
           estado: _vTelefono.estado,
           mensaje: _vTelefono.mensaje,
           onChanged: (v) => _vTelefono.revisar(v == widget.usuario.telefono ? '' : v,
-              formatoMalo: v.isEmpty || RegExp(r'^\d{7,15}$').hasMatch(v) ? null : '⚠️ Debe tener entre 7 y 15 dígitos'),
+              formatoMalo: v.isEmpty || formatoTelefono.hasMatch(v) ? null : textoTelefonoInvalido),
         ),
         LbAcciones(botones: [
           LbBoton('Cancelar', estilo: EstiloBoton.secundario, onPressed: widget.alTerminar),
