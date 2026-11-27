@@ -1,33 +1,21 @@
 import 'dart:convert';
-import 'dart:io';
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:monitor_app/screens/mapa_screen.dart';
 import 'package:monitor_app/theme/app_theme.dart';
 
+import 'fuentes.dart';
+
 final _mosaico = base64Decode(
     'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==');
 
 void main() {
-  // Las tipografías reales: la de relleno de las pruebas es mucho más ancha y daría medidas falsas
-  setUpAll(() async {
-    for (final (familia, archivos) in [
-      ('Barlow Condensed', ['BarlowCondensed-Medium', 'BarlowCondensed-SemiBold', 'BarlowCondensed-Bold']),
-      ('Atkinson Hyperlegible', ['AtkinsonHyperlegible-Regular', 'AtkinsonHyperlegible-Bold']),
-    ]) {
-      final cargador = FontLoader(familia);
-      for (final a in archivos) {
-        cargador.addFont(Future.value(ByteData.view(File('assets/fonts/$a.ttf').readAsBytesSync().buffer)));
-      }
-      await cargador.load();
-    }
-  });
+  setUpAll(cargarFuentes);
 
-  for (final escala in [1.0, 1.3]) {
+  for (final escala in [1.0, 1.3, 1.6]) {
     testWidgets('La tarjeta del bus cabe completa (letra x$escala)', (tester) async {
       final servidor = MockClient((p) async {
         if (p.url.host == 'tile.openstreetmap.org') return http.Response.bytes(_mosaico, 200);
@@ -62,6 +50,9 @@ void main() {
         }
         // Se elige la ruta (con letra grande su tarjeta puede quedar recortada, así que sin simular el dedo)
         // y luego el bus del mapa
+        // Con letra grande el panel entero se desplaza: se baja hasta la ruta
+        final panel = find.byWidgetPredicate((w) => w is Scrollable && w.axisDirection == AxisDirection.down);
+        await tester.scrollUntilVisible(find.text('R1'), 80, scrollable: panel.first);
         tester.widget<InkWell>(find.ancestor(of: find.text('R1'), matching: find.byType(InkWell)).first).onTap!();
         for (var i = 0; i < 8; i++) {
           await tester.pump(const Duration(milliseconds: 200));

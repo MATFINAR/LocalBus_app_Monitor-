@@ -8,6 +8,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../models/ruta.dart';
 import '../services/api.dart';
 import '../services/server_config.dart';
+import '../services/texto.dart';
 import '../services/ubicacion.dart';
 import '../theme/app_theme.dart';
 import '../widgets/caja_con_franja.dart';
@@ -80,10 +81,9 @@ class _RutasScreenState extends State<RutasScreen> {
   }
 
   List<Ruta> get _visibles {
-    final t = _texto.toLowerCase().trim();
     return _rutas.where((r) {
       final estado = _filtro == 'todas' || r.estado == _filtro;
-      final texto = t.isEmpty || '${r.codigo} ${r.nombre} ${r.origen} ${r.destino}'.toLowerCase().contains(t);
+      final texto = coincideBusqueda(_texto, [r.codigo, r.nombre, r.origen, r.destino]);
       return estado && texto;
     }).toList();
   }

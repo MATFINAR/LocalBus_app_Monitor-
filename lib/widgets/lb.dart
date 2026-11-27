@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../theme/app_theme.dart';
-import 'servidor_dialog.dart';
 
 /// Piezas de interfaz de LocalBus con el mismo aspecto que la página web (alertas.css, home.css, registro.css,
 /// rutas.css). Los nombres de las clases de la web van en cada comentario.
@@ -30,7 +29,6 @@ class Aro extends StatelessWidget {
 }
 
 /// Cabecera de página (.alertas-cabecera, .ru-cabecera): etiqueta roja, título y subtítulo, con una raya de 2 px.
-/// Mantener presionado el título abre la dirección del servidor.
 class CabeceraPagina extends StatelessWidget {
   const CabeceraPagina({super.key, required this.etiqueta, required this.titulo, this.subtitulo});
 
@@ -53,16 +51,9 @@ class CabeceraPagina extends StatelessWidget {
             style: AppTheme.titulo(size: 13.6, color: lb.rojoInterfaz, height: 1).copyWith(letterSpacing: 1.6),
           ),
           const SizedBox(height: 4),
-          GestureDetector(
-            behavior: HitTestBehavior.opaque,
-            onLongPress: () {
-              HapticFeedback.mediumImpact();
-              mostrarDialogoServidor(context);
-            },
-            child: Semantics(
-              header: true,
-              child: Text(titulo, style: AppTheme.titulo(size: 30, color: lb.tinta)),
-            ),
+          Semantics(
+            header: true,
+            child: Text(titulo, style: AppTheme.titulo(size: 30, color: lb.tinta)),
           ),
           if (subtitulo != null) ...[
             const SizedBox(height: 6),
@@ -259,7 +250,8 @@ class PestanaLb<T> {
   final bool esperando;
 }
 
-/// Pestañas con raya azul debajo de la elegida (.al-pestana, .filter-chip, .ru-pestana).
+/// Pestañas con raya azul debajo de la elegida (.al-pestana, .filter-chip, .ru-pestana). Van en una sola fila que
+/// se desplaza de lado si no caben.
 class LbPestanas<T> extends StatelessWidget {
   const LbPestanas({
     super.key,
@@ -282,11 +274,14 @@ class LbPestanas<T> extends StatelessWidget {
     return Container(
       width: double.infinity,
       decoration: BoxDecoration(border: Border(bottom: BorderSide(color: lb.linea))),
-      child: Wrap(
-        spacing: separacion,
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: Row(
         children: [
-          for (final p in pestanas)
-            Semantics(
+          for (final (i, p) in pestanas.indexed)
+            Padding(
+            padding: EdgeInsets.only(left: i == 0 ? 0 : separacion),
+            child: Semantics(
               button: true,
               selected: p.valor == elegida,
               child: InkWell(
@@ -294,7 +289,8 @@ class LbPestanas<T> extends StatelessWidget {
                 child: AnimatedContainer(
                   duration: const Duration(milliseconds: 200),
                   curve: curvaSuave,
-                  padding: const EdgeInsets.symmetric(vertical: 9),
+                  // Unos 48 px de alto: el mínimo cómodo para tocar
+                  padding: const EdgeInsets.symmetric(vertical: 13),
                   decoration: BoxDecoration(
                     border: Border(
                       bottom: BorderSide(color: p.valor == elegida ? lb.azul : Colors.transparent, width: 3),
@@ -319,7 +315,9 @@ class LbPestanas<T> extends StatelessWidget {
                 ),
               ),
             ),
+            ),
         ],
+        ),
       ),
     );
   }

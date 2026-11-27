@@ -8,6 +8,7 @@ import '../services/mensajes.dart';
 import '../services/navegacion.dart';
 import '../services/server_config.dart';
 import '../services/sesion.dart';
+import '../services/texto.dart';
 import '../services/ubicacion.dart';
 import '../theme/app_theme.dart';
 import '../widgets/caja_con_franja.dart';
@@ -981,24 +982,9 @@ class _SeguirRutasState extends State<_SeguirRutas> {
     super.dispose();
   }
 
-  /// Minúsculas y sin tildes, para que «itagui» encuentre «Itagüí».
-  static String _simple(String t) {
-    const con = 'áéíóúüñ', sin = 'aeiouun';
-    var r = t.toLowerCase();
-    for (var i = 0; i < con.length; i++) {
-      r = r.replaceAll(con[i], sin[i]);
-    }
-    return r;
-  }
-
-  /// Las rutas cuyo código o nombre tiene todas las palabras escritas.
-  List<RutaOpcion> get _encontradas {
-    final palabras = _simple(_buscar.text).split(' ').where((p) => p.isNotEmpty);
-    return widget.rutas.where((r) {
-      final texto = _simple('${r.codigo} ${r.nombre}');
-      return palabras.every(texto.contains);
-    }).toList();
-  }
+  /// Las rutas cuyo código o nombre tiene todas las palabras escritas, sin importar las tildes.
+  List<RutaOpcion> get _encontradas =>
+      widget.rutas.where((r) => coincideBusqueda(_buscar.text, [r.codigo, r.nombre])).toList();
 
   Future<void> _guardar() async {
     setState(() {

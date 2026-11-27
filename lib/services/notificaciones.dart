@@ -45,6 +45,9 @@ class Notificaciones with WidgetsBindingObserver {
 
   final FlutterLocalNotificationsPlugin _plugin = FlutterLocalNotificationsPlugin();
 
+  /// Aumenta cada vez que llegan alertas nuevas con la app abierta (el mapa pone al día su tablero).
+  final ValueNotifier<int> llegaron = ValueNotifier(0);
+
   /// granted (activadas), denied (bloqueadas) o default (sin preguntar).
   final ValueNotifier<String> permiso = ValueNotifier('default');
 
@@ -190,6 +193,7 @@ class Notificaciones with WidgetsBindingObserver {
       if (cursor != null) await prefs.setString(_claveCursor, cursor);
 
       // Abajo en la app, como mucho 3 a la vez; a la barra van todas
+      if (enPantalla && nuevas.isNotEmpty) llegaron.value++;
       if (enPantalla) {
         for (final a in nuevas.sublist(nuevas.length > 3 ? nuevas.length - 3 : 0)) {
           Mensajes.alerta('${_iconos[a['tipo']] ?? '🚨'} Nueva alerta · ${a['ruta']}', '${a['descripcion'] ?? ''}',
@@ -211,6 +215,7 @@ class Notificaciones with WidgetsBindingObserver {
     final mostrar = enBarra ?? (_listo ? _mostrarEnBarra : null);
     if (mostrar == null || permiso.value != 'granted') return;
     final pendientes = (prefs.getStringList(_clavePendientes) ?? []).toList();
+    final entregadas = <String>[];
     while (pendientes.isNotEmpty) {
       try {
         final a = jsonDecode(pendientes.first) as Map<String, dynamic>;
@@ -219,8 +224,46 @@ class Notificaciones with WidgetsBindingObserver {
         debugPrint('No se pudo notificar: $e');
         return; // se intenta de nuevo en la próxima vuelta
       }
-      pendientes.removeAt(0);
+      entregadas.add(pendientes.removeAt(0));
       await prefs.setStringList(_clavePendientes, pendientes);
+    }
+    if (entregadas.isNotEmpty && enBarra == null) await _resumen(entregadas);
+  }
+
+  static const _grupo = 'localbus_alertas';
+  static const _idResumen = 2147483000;
+
+  /// Las alertas van en un grupo y solo el resumen avisa con sonido: si llegan muchas juntas (por ejemplo, después
+  /// de estar sin conexión) el celular suena una vez y no una por alerta.
+  Future<void> _resumen(List<String> entregadas) async {
+    final titulos = <String>[];
+    for (final t in entregadas) {
+      try {
+        titulos.add('${(jsonDecode(t) as Map)['ruta']}');
+      } catch (_) {}
+    }
+    final texto = entregadas.length == 1 ? 'Nueva alerta · ${titulos.first}' : '${entregadas.length} alertas nuevas';
+    try {
+      await _plugin.show(
+        id: _idResumen,
+        title: '🚨 $texto',
+        body: titulos.join(' · '),
+        notificationDetails: NotificationDetails(
+          android: AndroidNotificationDetails(
+            'alertas',
+            'Alertas de las rutas',
+            channelDescription: 'Avisos cuando se publica una alerta nueva',
+            importance: Importance.high,
+            priority: Priority.high,
+            groupKey: _grupo,
+            setAsGroupSummary: true,
+            groupAlertBehavior: GroupAlertBehavior.summary,
+            styleInformation: InboxStyleInformation(titulos, summaryText: texto),
+          ),
+        ),
+      );
+    } catch (e) {
+      debugPrint('No se pudo agrupar las notificaciones: $e');
     }
   }
 
@@ -236,6 +279,8 @@ class Notificaciones with WidgetsBindingObserver {
             importance: Importance.high,
             priority: Priority.high,
             styleInformation: BigTextStyleInformation(texto), // el texto completo al desplegarla
+            groupKey: _grupo,
+            groupAlertBehavior: GroupAlertBehavior.summary, // suena el resumen, no cada una
           ),
         ),
       );

@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart' hide Path;
@@ -13,6 +14,7 @@ import '../services/navegacion.dart';
 import '../services/notificaciones.dart';
 import '../services/server_config.dart';
 import '../services/sesion.dart';
+import '../services/texto.dart';
 import '../services/ubicacion.dart';
 import '../services/ventana_flotante.dart';
 import '../theme/app_theme.dart';
@@ -68,7 +70,15 @@ class _MapaScreenState extends State<MapaScreen> with SingleTickerProviderStateM
   final Map<int, _BusAnimado> _posiciones = {};
   bool _buscandoBuses = false;
   bool _sinConexion = false;
-  int? _msPuntos;
+  bool _pidiendoBuses = false;
+  bool _pidiendoLlegada = false;
+  AppLifecycleState _estadoApp = AppLifecycleState.resumed;
+
+  // Panel de rutas: si con la letra del celular no cabe, todo su contenido se desplaza junto
+  final GlobalKey _claveFijo = GlobalKey();
+  double _maxPanel = 0;
+  double? _altoArriba;
+  double? _altoFijo;
 
   // Tu ubicación y ventanas sobre el mapa
   LatLng? _yo;
@@ -92,6 +102,7 @@ class _MapaScreenState extends State<MapaScreen> with SingleTickerProviderStateM
     Sesion.i.addListener(_alCambiarSesion);
     Navegacion.pestana.addListener(_alCambiarPestana);
     VentanaFlotante.activa.addListener(_alCambiarVentana);
+    Notificaciones.i.llegaron.addListener(_alLlegarAlerta);
     Ubicacion.silenciosa().then((p) => _yo ??= p);
   }
 
@@ -102,6 +113,7 @@ class _MapaScreenState extends State<MapaScreen> with SingleTickerProviderStateM
     Sesion.i.removeListener(_alCambiarSesion);
     Navegacion.pestana.removeListener(_alCambiarPestana);
     VentanaFlotante.activa.removeListener(_alCambiarVentana);
+    Notificaciones.i.llegaron.removeListener(_alLlegarAlerta);
     VentanaFlotante.permitir(false);
     _timerBuses?.cancel();
     _timerLlegada?.cancel();
@@ -112,12 +124,29 @@ class _MapaScreenState extends State<MapaScreen> with SingleTickerProviderStateM
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.resumed) _cargar(silencioso: true);
+    _estadoApp = state;
+    if (state == AppLifecycleState.resumed) {
+      _cargar(silencioso: true);
+      _consultarBuses();
+    }
   }
 
   void _alCambiarSesion() => setState(() {});
 
-  void _alCambiarPestana() => setState(() {});
+  void _alCambiarPestana() {
+    setState(() {});
+    if (Navegacion.pestana.value == Navegacion.mapa) _consultarBuses();
+  }
+
+  /// Llegó una alerta nueva: el tablero de avisos y el estado de las rutas se ponen al día.
+  void _alLlegarAlerta() => _cargar(silencioso: true);
+
+  /// Alguien está viendo el mapa (en la app o en la ventana flotante). Si no, no se piden buses: ahorra batería
+  /// y datos.
+  bool get _mirando =>
+      _flotante ||
+      (Navegacion.pestana.value == Navegacion.mapa &&
+          (_estadoApp == AppLifecycleState.resumed || _estadoApp == AppLifecycleState.inactive));
 
   // ================= VENTANA FLOTANTE =================
 
@@ -234,20 +263,23 @@ class _MapaScreenState extends State<MapaScreen> with SingleTickerProviderStateM
   // ================= BUSES EN VIVO =================
 
   Future<void> _consultarBuses() async {
-    if (_seleccionada == null) return; // sin ruta elegida no se muestra ningún bus
-    final reloj = Stopwatch()..start();
+    // Sin ruta elegida no se muestra ningún bus. Una consulta a la vez: si una respuesta vieja llegara después de
+    // una nueva, el bus retrocedería.
+    if (_seleccionada == null || !_mirando || _pidiendoBuses) return;
+    _pidiendoBuses = true;
     try {
       final d = await Api.get('/api/ubicaciones/');
       if (!mounted) return;
       final buses = (d['buses'] as List? ?? []).map((b) => BusUbicacion.fromJson(b as Map<String, dynamic>)).toList();
       setState(() {
-        _msPuntos = reloj.elapsedMilliseconds;
         _buscandoBuses = false;
         _sinConexion = false;
       });
       _actualizarBuses(buses);
     } on ApiError {
       if (mounted) setState(() => _sinConexion = true);
+    } finally {
+      _pidiendoBuses = false;
     }
   }
 
@@ -312,6 +344,8 @@ class _MapaScreenState extends State<MapaScreen> with SingleTickerProviderStateM
   }
 
   Future<void> _consultarLlegada(int busId) async {
+    if (!_mirando || _pidiendoLlegada) return;
+    _pidiendoLlegada = true;
     final yo = _yo ?? Ubicacion.ultima;
     try {
       final d = await Api.get('/api/tiempo-llegada-usuario/$busId/',
@@ -327,6 +361,8 @@ class _MapaScreenState extends State<MapaScreen> with SingleTickerProviderStateM
         _llegada = e.sinConexion ? null : e.datos;
         _llegadaReintentando = e.sinConexion;
       });
+    } finally {
+      _pidiendoLlegada = false;
     }
   }
 
@@ -407,13 +443,8 @@ class _MapaScreenState extends State<MapaScreen> with SingleTickerProviderStateM
   }
 
   List<Ruta> get _visibles {
-    final t = _busqueda.toLowerCase();
     final lista = _rutas.where((r) {
-      final coincide = t.isEmpty ||
-          r.nombre.toLowerCase().contains(t) ||
-          r.codigo.toLowerCase().contains(t) ||
-          r.origen.toLowerCase().contains(t) ||
-          r.destino.toLowerCase().contains(t);
+      final coincide = coincideBusqueda(_busqueda, [r.codigo, r.nombre, r.origen, r.destino]);
       final d = _distancias?[r.id];
       final filtro = _filtro == 'all' || (d != null && d <= _radioCercanas);
       return coincide && filtro;
@@ -430,6 +461,7 @@ class _MapaScreenState extends State<MapaScreen> with SingleTickerProviderStateM
   Widget build(BuildContext context) {
     final lb = context.lb;
     final alto = MediaQuery.of(context).size.height;
+    _maxPanel = alto * (alto < 700 ? 0.6 : 0.5);
     // Ventana flotante: solo con una ruta fijada, viendo el mapa y sin ventanas encima
     VentanaFlotante.permitir(_ruta != null &&
         Navegacion.pestana.value == Navegacion.mapa &&
@@ -443,7 +475,7 @@ class _MapaScreenState extends State<MapaScreen> with SingleTickerProviderStateM
             Expanded(child: _zonaMapa(context)),
             if (!_flotante)
             ConstrainedBox(
-              constraints: BoxConstraints(maxHeight: alto * (alto < 700 ? 0.6 : 0.5)),
+              constraints: BoxConstraints(maxHeight: _maxPanel),
               child: Container(
                 decoration: BoxDecoration(
                   color: lb.blanco,
@@ -689,6 +721,9 @@ class _MapaScreenState extends State<MapaScreen> with SingleTickerProviderStateM
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
+        _MedirAlto(
+          alMedir: (h) => setState(() => _altoArriba = h),
+          child: Column(mainAxisSize: MainAxisSize.min, children: [
         // Cabecera
         Padding(
           padding: const EdgeInsets.fromLTRB(20, 12, 20, 4),
@@ -756,6 +791,8 @@ class _MapaScreenState extends State<MapaScreen> with SingleTickerProviderStateM
             ],
           ),
         ),
+          ]),
+        ),
 
         // Búsqueda, filtros y lista (se pliegan)
         Flexible(
@@ -776,7 +813,11 @@ class _MapaScreenState extends State<MapaScreen> with SingleTickerProviderStateM
     final enVivo = ruta != null && !_buscandoBuses && !_sinConexion && _posiciones.isNotEmpty;
     final buscando = ruta != null && (_buscandoBuses || _sinConexion);
 
-    return Column(
+    // Buscador, filtros y avisos. Con la clave conservan su estado (lo escrito, el foco) al cambiar de modo.
+    final fijo = _MedirAlto(
+      key: _claveFijo,
+      alMedir: (h) => setState(() => _altoFijo = h),
+      child: Column(
       mainAxisSize: MainAxisSize.min,
       children: [
         Padding(
@@ -834,26 +875,40 @@ class _MapaScreenState extends State<MapaScreen> with SingleTickerProviderStateM
           borde: true,
           prefijo: buscando ? Aro(size: 12, color: lb.tinta) : enVivo ? const EnVivoDot(size: 9) : null,
         ),
-        Container(
-          width: double.infinity,
-          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 6),
-          decoration: BoxDecoration(border: Border(bottom: BorderSide(color: lb.linea))),
-          child: Text.rich(
-            TextSpan(children: [
-              const TextSpan(text: 'Puntos de la ruta: '),
-              TextSpan(text: _msPuntos == null ? '—' : '$_msPuntos', style: const TextStyle(fontWeight: FontWeight.w700)),
-              const TextSpan(text: ' ms'),
-            ]),
-            style: TextStyle(fontSize: 13.6, color: lb.tinta, fontFeatures: const [FontFeature.tabularFigures()]),
-          ),
-        ),
-        Flexible(child: _lista(context, visibles)),
+      ],
+      ),
+    );
+
+    // Se deja sitio para ver al menos unas rutas; si no, todo se desplaza junto (letra muy grande)
+    final cabe = _altoArriba != null && _altoFijo != null && _altoArriba! + _altoFijo! + 120 <= _maxPanel;
+    if (cabe) {
+      return Column(mainAxisSize: MainAxisSize.min, children: [fijo, Flexible(child: _lista(context, visibles))]);
+    }
+    final lista = _lista(context, visibles);
+    return CustomScrollView(
+      shrinkWrap: true,
+      slivers: [
+        SliverToBoxAdapter(child: fijo),
+        if (lista is ListView)
+          SliverPadding(
+            padding: EdgeInsets.only(bottom: MediaQuery.of(context).padding.bottom + 8),
+            sliver: SliverList.builder(itemCount: visibles.length, itemBuilder: (c, i) => _tarjeta(visibles[i])),
+          )
+        else
+          SliverToBoxAdapter(child: lista),
       ],
     );
   }
 
+  Widget _tarjeta(Ruta r) => _TarjetaRuta(
+        ruta: r,
+        elegida: r.id == _seleccionada,
+        distancia: _filtro == 'cercanas' ? (_distancias?[r.id]) : null,
+        onTap: () => _seleccionar(r.id),
+        linea: context.lb.linea,
+      );
+
   Widget _lista(BuildContext context, List<Ruta> visibles) {
-    final lb = context.lb;
     if (_cargando) {
       return const Padding(padding: EdgeInsets.all(24), child: CargandoTexto('Cargando las rutas…'));
     }
@@ -862,8 +917,8 @@ class _MapaScreenState extends State<MapaScreen> with SingleTickerProviderStateM
         child: StateMessage(
           icon: Icons.wifi_off_rounded,
           title: 'No pudimos cargar las rutas',
-          message: '$_errorCarga\n\nServidor: ${ServerConfig.url}. Mantén presionado el título de cualquier otra '
-              'pantalla para cambiarlo.',
+          message: '$_errorCarga\n\nServidor: ${ServerConfig.url}. Para cambiarlo, mantén presionada esa dirección '
+              'durante 15 segundos al final de «Acerca de».',
           actionLabel: 'Reintentar',
           onAction: _cargar,
         ),
@@ -880,16 +935,7 @@ class _MapaScreenState extends State<MapaScreen> with SingleTickerProviderStateM
       padding: EdgeInsets.only(bottom: MediaQuery.of(context).padding.bottom + 8),
       shrinkWrap: true,
       itemCount: visibles.length,
-      itemBuilder: (context, i) {
-        final r = visibles[i];
-        return _TarjetaRuta(
-          ruta: r,
-          elegida: r.id == _seleccionada,
-          distancia: _filtro == 'cercanas' ? (_distancias?[r.id]) : null,
-          onTap: () => _seleccionar(r.id),
-          linea: lb.linea,
-        );
-      },
+      itemBuilder: (context, i) => _tarjeta(visibles[i]),
     );
   }
 }
@@ -1032,9 +1078,9 @@ class _TarjetaRuta extends StatelessWidget {
                         runSpacing: 3,
                         crossAxisAlignment: WrapCrossAlignment.center,
                         children: [
-                          Text('${_numero(ruta.distanciaKm)} km', style: datos),
-                          Text('${ruta.duracionMinutos} min', style: datos),
-                          Text('cada ${ruta.frecuenciaMinutos} min', style: datos),
+                          if (ruta.distanciaKm > 0) Text('${_numero(ruta.distanciaKm)} km', style: datos),
+                          if (ruta.duracionMinutos > 0) Text('${ruta.duracionMinutos} min', style: datos),
+                          if (ruta.frecuenciaMinutos > 0) Text('cada ${ruta.frecuenciaMinutos} min', style: datos),
                           if (!ruta.activa) InsigniaRuta(estado: ruta.estado, texto: ruta.estadoNombre),
                         ],
                       ),
@@ -1058,6 +1104,35 @@ class _TarjetaRuta extends StatelessWidget {
 
   static String _numero(double v) => v == v.roundToDouble() ? v.toStringAsFixed(1) : '$v';
   static String _textoDistancia(double m) => m < 100 ? 'a menos de 100 m' : 'a ${(m / 10).round() * 10} m';
+}
+
+/// Avisa del alto que ocupa su hijo cada vez que cambia.
+class _MedirAlto extends SingleChildRenderObjectWidget {
+  const _MedirAlto({super.key, required this.alMedir, required super.child});
+  final ValueChanged<double> alMedir;
+
+  @override
+  RenderObject createRenderObject(BuildContext context) => _RenderMedirAlto(alMedir);
+
+  @override
+  void updateRenderObject(BuildContext context, _RenderMedirAlto renderObject) => renderObject.alMedir = alMedir;
+}
+
+class _RenderMedirAlto extends RenderProxyBox {
+  _RenderMedirAlto(this.alMedir);
+  ValueChanged<double> alMedir;
+  double? _anterior;
+
+  @override
+  void performLayout() {
+    super.performLayout();
+    final alto = size.height;
+    if (alto == _anterior) return;
+    _anterior = alto;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (attached) alMedir(alto);
+    });
+  }
 }
 
 /// Chapa del bus (.bus-chapa): código de la ruta sobre su color, con un pico abajo.

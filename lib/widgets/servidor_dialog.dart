@@ -3,26 +3,8 @@ import 'package:flutter/services.dart';
 import '../services/server_config.dart';
 import '../theme/app_theme.dart';
 
-/// Título de pantalla que, al mantenerlo presionado, abre la ventana para
-/// cambiar la dirección del servidor. No tiene ninguna pista visible.
-class TituloOculto extends StatelessWidget {
-  const TituloOculto(this.texto, {super.key});
-
-  final String texto;
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      behavior: HitTestBehavior.opaque,
-      onLongPress: () {
-        HapticFeedback.mediumImpact();
-        mostrarDialogoServidor(context);
-      },
-      child: Text(texto),
-    );
-  }
-}
-
+/// Ventana para cambiar la dirección del servidor. Se abre manteniendo presionada la dirección 15 s al final de
+/// «Acerca de».
 Future<void> mostrarDialogoServidor(BuildContext context) {
   return showDialog<void>(
     context: context,
