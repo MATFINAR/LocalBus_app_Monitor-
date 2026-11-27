@@ -973,6 +973,32 @@ class _SeguirRutasState extends State<_SeguirRutas> {
   late final Set<int> _elegidas = {...widget.seguidas};
   bool _enviando = false;
   String? _error;
+  final TextEditingController _buscar = TextEditingController();
+
+  @override
+  void dispose() {
+    _buscar.dispose();
+    super.dispose();
+  }
+
+  /// Minúsculas y sin tildes, para que «itagui» encuentre «Itagüí».
+  static String _simple(String t) {
+    const con = 'áéíóúüñ', sin = 'aeiouun';
+    var r = t.toLowerCase();
+    for (var i = 0; i < con.length; i++) {
+      r = r.replaceAll(con[i], sin[i]);
+    }
+    return r;
+  }
+
+  /// Las rutas cuyo código o nombre tiene todas las palabras escritas.
+  List<RutaOpcion> get _encontradas {
+    final palabras = _simple(_buscar.text).split(' ').where((p) => p.isNotEmpty);
+    return widget.rutas.where((r) {
+      final texto = _simple('${r.codigo} ${r.nombre}');
+      return palabras.every(texto.contains);
+    }).toList();
+  }
 
   Future<void> _guardar() async {
     setState(() {
@@ -995,19 +1021,57 @@ class _SeguirRutasState extends State<_SeguirRutas> {
   @override
   Widget build(BuildContext context) {
     final lb = context.lb;
+    final encontradas = _encontradas;
+    // Con el teclado abierto la lista se acorta para que se siga viendo
+    final alto = (MediaQuery.of(context).size.height - MediaQuery.of(context).viewInsets.bottom) * 0.42;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         if (_error != null) LbNota.error(context, _error!),
         const LbNota('Te avisaremos solo de las alertas de estas rutas. Si no eliges ninguna, te avisamos de todas.'),
+        TextField(
+          controller: _buscar,
+          onChanged: (_) => setState(() {}),
+          textInputAction: TextInputAction.search,
+          style: TextStyle(fontSize: 16, color: lb.tinta),
+          decoration: InputDecoration(
+            hintText: 'Buscar por código o nombre',
+            hintStyle: TextStyle(color: lb.grisTexto),
+            suffixIcon: _buscar.text.isEmpty
+                ? Icon(Icons.search_rounded, color: lb.grisTexto)
+                : IconButton(
+                    tooltip: 'Borrar búsqueda',
+                    onPressed: () => setState(_buscar.clear),
+                    icon: Icon(Icons.close_rounded, color: lb.grisTexto),
+                  ),
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.symmetric(vertical: 8),
+          child: Text(
+            _elegidas.isEmpty
+                ? 'Ninguna elegida'
+                : _elegidas.length == 1
+                    ? '1 ruta elegida'
+                    : '${_elegidas.length} rutas elegidas',
+            style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: lb.grisTexto),
+          ),
+        ),
         Container(
-          constraints: BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.45),
+          constraints: BoxConstraints(maxHeight: alto),
           decoration: BoxDecoration(border: Border.all(color: lb.linea)),
           child: ListView(
             shrinkWrap: true,
             children: [
-              for (final r in widget.rutas)
+              if (encontradas.isEmpty)
+                Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Text('No encontramos rutas. Prueba con otro código o nombre.',
+                      style: TextStyle(fontSize: 14, color: lb.grisTexto)),
+                ),
+              for (final r in encontradas)
                 CheckboxListTile(
+                  key: ValueKey(r.id),
                   value: _elegidas.contains(r.id),
                   dense: true,
                   controlAffinity: ListTileControlAffinity.leading,

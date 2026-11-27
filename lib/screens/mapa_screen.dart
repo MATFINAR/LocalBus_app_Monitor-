@@ -649,13 +649,13 @@ class _MapaScreenState extends State<MapaScreen> with SingleTickerProviderStateM
             _cerrarLlegada();
           },
         );
-        alto = 250;
+        alto = 340;
       case 'origen':
         contenido = _GloboTexto(titulo: 'Origen', texto: ruta?.origen ?? '');
-        alto = 140;
+        alto = 200;
       case 'destino':
         contenido = _GloboTexto(titulo: 'Destino', texto: ruta?.destino ?? '');
-        alto = 140;
+        alto = 200;
       case 'parada':
         contenido = const _GloboTexto(titulo: '', texto: 'Parada', pequeno: true);
         alto = 90;
@@ -670,7 +670,11 @@ class _MapaScreenState extends State<MapaScreen> with SingleTickerProviderStateM
       alignment: Alignment.topCenter,
       child: Padding(
         padding: EdgeInsets.only(bottom: esBus ? 38 : 14),
-        child: Align(alignment: Alignment.bottomCenter, child: contenido),
+        // El marcador tiene altura fija: si el texto no cabe (letra grande), la ventana se encoge entera
+        child: Align(
+          alignment: Alignment.bottomCenter,
+          child: FittedBox(fit: BoxFit.scaleDown, alignment: Alignment.bottomCenter, child: contenido),
+        ),
       ),
     );
   }
@@ -1289,15 +1293,24 @@ class _FichaBus extends StatelessWidget {
             decoration: BoxDecoration(border: Border(bottom: BorderSide(color: lb.linea))),
             child: Row(
               children: [
-                Text(placa, style: AppTheme.titulo(size: 24, color: lb.tinta, height: 1).copyWith(letterSpacing: 0.7)),
-                const SizedBox(width: 10),
-                Container(
-                  padding: const EdgeInsets.fromLTRB(6, 5, 6, 4),
-                  decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(AppTheme.radio)),
-                  child: Text(codigo.isEmpty ? 'Ruta' : codigo,
-                      style: AppTheme.titulo(size: 17, color: lb.sobreColor, height: 1)),
+                // Placa y código se achican juntos si son largos
+                Expanded(
+                  child: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    alignment: Alignment.centerLeft,
+                    child: Row(mainAxisSize: MainAxisSize.min, children: [
+                      Text(placa,
+                          style: AppTheme.titulo(size: 24, color: lb.tinta, height: 1).copyWith(letterSpacing: 0.7)),
+                      const SizedBox(width: 10),
+                      Container(
+                        padding: const EdgeInsets.fromLTRB(6, 5, 6, 4),
+                        decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(AppTheme.radio)),
+                        child: Text(codigo.isEmpty ? 'Ruta' : codigo,
+                            style: AppTheme.titulo(size: 17, color: lb.sobreColor, height: 1)),
+                      ),
+                    ]),
+                  ),
                 ),
-                const Spacer(),
                 IconButton(
                   onPressed: onCerrar,
                   tooltip: 'Cerrar',
